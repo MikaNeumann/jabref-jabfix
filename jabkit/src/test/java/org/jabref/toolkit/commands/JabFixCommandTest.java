@@ -1,5 +1,8 @@
 package org.jabref.toolkit.commands;
 
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.List;
 
 import org.jabref.logic.bibtex.FieldPreferences;
@@ -7,6 +10,7 @@ import org.jabref.toolkit.exception.CliExceptionHandler;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 import picocli.CommandLine;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -70,6 +74,47 @@ class JabFixCommandTest extends AbstractJabKitTest {
 
         String findings = commandLine.getStandardOutput();
         assertTrue(findings.contains("[surrounding-whitespace]"), findings);
+    }
+
+    /// Serialization is the writer's half of the work: entry type capitalization, value delimiters,
+    /// field order and indentation are normalized whatever the input looked like.
+    @Test
+    void theFormattedLibraryIsNormalized(@TempDir Path tempDir) throws IOException {
+        Path library = Files.writeString(tempDir.resolve("sloppy.bib"), """
+                @ARTICLE{key,
+                author = " Doe, Jane ",
+                    YEAR="2024"
+                }
+                """);
+
+        assertEquals(CommandLine.ExitCode.OK, commandLine.executeToLog("jabfix", library.toString()));
+
+        // The database type is written although the input never named it: the importer infers it for
+        // a file that declares none, so even a clean library grows this line.
+        assertEquals("""
+                @Article{key,
+                  author = {Doe, Jane},
+                  year   = {2024},
+                }
+
+                @Comment{jabref-meta: databaseType:bibtex;}
+                """, commandLine.getStandardOutput().replace("\r\n", "\n"));
+    }
+
+    @Test
+    void formattingAnAlreadyFormattedLibraryChangesNothing(@TempDir Path tempDir) throws IOException {
+        Path library = Files.writeString(tempDir.resolve("sloppy.bib"), """
+                @ARTICLE{key,
+                author = " Doe, Jane ",
+                    YEAR="2024"
+                }
+                """);
+
+        assertEquals(CommandLine.ExitCode.OK, commandLine.executeToLog("jabfix", "--in-place", library.toString()));
+        String once = Files.readString(library);
+        assertEquals(CommandLine.ExitCode.OK, commandLine.executeToLog("jabfix", "--in-place", library.toString()));
+
+        assertEquals(once, Files.readString(library));
     }
 
     @Test

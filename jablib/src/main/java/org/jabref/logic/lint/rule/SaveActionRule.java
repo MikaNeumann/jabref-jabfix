@@ -44,9 +44,9 @@ public record SaveActionRule(FieldFormatterCleanup saveAction) implements Rule {
     }
 
     /// A Save Action removes a field whose value it formats to nothing, reported as a `null` new value.
-    private static void apply(FieldChange change, BibEntry target) {
-        Optional.ofNullable(change.newValue()).ifPresentOrElse(
-                newValue -> target.setField(change.field(), newValue),
-                () -> target.clearField(change.field()));
+    private static Optional<FieldChange> apply(FieldChange change, BibEntry target) {
+        return Optional.ofNullable(change.newValue())
+                       .map(newValue -> target.setField(change.field(), newValue))
+                       .orElseGet(() -> target.clearField(change.field()));
     }
 }

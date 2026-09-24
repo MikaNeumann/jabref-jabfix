@@ -2,12 +2,16 @@ package org.jabref.toolkit.commands;
 
 import java.io.IOException;
 import java.io.PrintStream;
+import java.io.StringWriter;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.concurrent.Callable;
 
+import org.jabref.logic.exporter.BibDatabaseWriter;
+import org.jabref.logic.exporter.BibWriter;
+import org.jabref.logic.exporter.SelfContainedSaveConfiguration;
 import org.jabref.logic.importer.ParserResult;
 import org.jabref.logic.l10n.Localization;
 import org.jabref.logic.lint.JabFix;
@@ -15,6 +19,7 @@ import org.jabref.logic.lint.JabFixResult;
 import org.jabref.logic.lint.rule.Finding;
 import org.jabref.logic.lint.rule.RuleSet;
 import org.jabref.logic.lint.rule.UnknownRuleException;
+import org.jabref.model.database.BibDatabaseContext;
 import org.jabref.model.entry.field.Field;
 import org.jabref.toolkit.exception.CliException;
 import org.jabref.toolkit.exception.ImportServiceException;
@@ -75,19 +80,16 @@ class JabFixCommand implements Callable<Integer> {
         boolean quiet = sharedOptions.porcelain || !(inPlace || checkOnly);
         ParserResult parserResult = ImportService.importBibTexFile(inputFile, jabKit.cliPreferences, quiet);
 
-        JabFix jabFix = new JabFix(
-                ruleSet,
-                jabKit.cliPreferences.getFieldPreferences(),
-                jabKit.cliPreferences.getCitationKeyPatternPreferences(),
-                jabKit.entryTypesManager);
+        BibDatabaseContext databaseContext = parserResult.getDatabaseContext();
 
         try {
             // Only the parsed library in memory is changed here; nothing reaches disk unless
             // --in-place says so, which is what lets --check reuse the very same run.
-            JabFixResult result = jabFix.run(parserResult.getDatabaseContext());
+            JabFixResult result = new JabFix(ruleSet).apply(databaseContext.getEntries());
+            String formatted = serialize(databaseContext);
 
             if (checkOnly) {
-                return check(inputFile, result);
+                return check(inputFile, result.findings(), formatted);
             }
 
             // A rule that found something it cannot repair has to be said out loud, since it will
@@ -95,10 +97,10 @@ class JabFixCommand implements Callable<Integer> {
             report(inputFile, result.findings().stream().filter(finding -> !finding.isFixable()).toList(), System.err);
 
             if (inPlace) {
-                return write(inputFile, result.formatted());
+                return write(inputFile, formatted);
             }
 
-            System.out.print(result.formatted());
+            System.out.print(formatted);
             System.out.flush();
             return CommandLine.ExitCode.OK;
         } catch (IOException e) {
@@ -122,14 +124,33 @@ class JabFixCommand implements Callable<Integer> {
         }
     }
 
-    private int check(Path inputFile, JabFixResult result) throws IOException {
-        report(inputFile, result.findings(), System.out);
+    /// Writes the library the rules left behind, which is what a save of it produces. Reformatting
+    /// on save rewrites every entry; without it the writer would keep the serialization each entry
+    /// had in the input file, which is exactly what is to be replaced.
+    private String serialize(BibDatabaseContext databaseContext) throws IOException {
+        StringWriter stringWriter = new StringWriter();
+        SelfContainedSaveConfiguration saveConfiguration =
+                (SelfContainedSaveConfiguration) new SelfContainedSaveConfiguration().withReformatOnSave(true);
+
+        new BibDatabaseWriter(
+                new BibWriter(stringWriter, databaseContext.getDatabase().getNewLineSeparator()),
+                saveConfiguration,
+                jabKit.cliPreferences.getFieldPreferences(),
+                jabKit.cliPreferences.getCitationKeyPatternPreferences(),
+                jabKit.entryTypesManager)
+                .writeDatabase(databaseContext);
+
+        return stringWriter.toString();
+    }
+
+    private int check(Path inputFile, List<Finding> findings, String formatted) throws IOException {
+        report(inputFile, findings, System.out);
 
         // Findings alone are not the whole story: reformatting alters things no rule reports on,
         // such as entry type capitalization, so the serialized result has to be compared as well.
-        boolean formattingDiffers = !result.formatted().equals(Files.readString(inputFile, StandardCharsets.UTF_8));
+        boolean formattingDiffers = !formatted.equals(Files.readString(inputFile, StandardCharsets.UTF_8));
 
-        if (result.findings().isEmpty() && !formattingDiffers) {
+        if (findings.isEmpty() && !formattingDiffers) {
             if (!sharedOptions.porcelain) {
                 System.out.println(Localization.lang("'%0' is already formatted.", inputFile));
             }

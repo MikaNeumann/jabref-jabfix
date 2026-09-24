@@ -3,15 +3,16 @@ package org.jabref.logic.lint;
 import java.io.IOException;
 import java.io.Reader;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import org.jabref.logic.bibtex.FieldPreferences;
-import org.jabref.logic.citationkeypattern.CitationKeyPatternPreferences;
 import org.jabref.logic.importer.ImportFormatPreferences;
 import org.jabref.logic.importer.fileformat.BibtexParser;
 import org.jabref.logic.lint.rule.Finding;
 import org.jabref.logic.lint.rule.RuleSet;
-import org.jabref.model.database.BibDatabaseContext;
-import org.jabref.model.entry.BibEntryTypesManager;
+import org.jabref.model.FieldChange;
+import org.jabref.model.entry.BibEntry;
+import org.jabref.model.entry.field.StandardField;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -31,76 +32,79 @@ class JabFixTest {
             }
             """;
 
-    private FieldPreferences fieldPreferences;
     private ImportFormatPreferences importFormatPreferences;
 
     @BeforeEach
     void setUp() {
-        fieldPreferences = new FieldPreferences(true, List.of(), List.of());
         importFormatPreferences = mock(ImportFormatPreferences.class, Answers.RETURNS_DEEP_STUBS);
-        when(importFormatPreferences.fieldPreferences()).thenReturn(fieldPreferences);
+        when(importFormatPreferences.fieldPreferences()).thenReturn(new FieldPreferences(true, List.of(), List.of()));
     }
 
     @Test
-    void runNormalizesSerializationAndAppliesRules() throws IOException {
-        assertEquals("""
-                @Article{key,
-                  author = {Doe, Jane},
-                  year   = {2024},
-                }
-                """, run(RuleSet.all(), SLOPPY).formatted());
+    void repairsWhatTheRulesReport() throws IOException {
+        List<BibEntry> entries = parse(SLOPPY);
+
+        new JabFix(RuleSet.all()).apply(entries);
+
+        assertEquals("Doe, Jane", entries.getFirst().getField(StandardField.AUTHOR).orElseThrow());
     }
 
     @Test
-    void runIsIdempotent() throws IOException {
-        String once = run(RuleSet.all(), SLOPPY).formatted();
-        assertEquals(once, run(RuleSet.all(), once).formatted());
-    }
+    void reportsWhatItRepaired() throws IOException {
+        JabFixResult result = new JabFix(RuleSet.all()).apply(parse(SLOPPY));
 
-    @Test
-    void runReportsWhatItRepaired() throws IOException {
-        List<String> ruleIds = run(RuleSet.all(), SLOPPY).findings().stream()
-                                                         .map(finding -> finding.rule().id())
-                                                         .toList();
-
-        assertEquals(List.of("surrounding-whitespace"), ruleIds);
+        assertEquals(List.of("surrounding-whitespace"),
+                result.findings().stream().map(finding -> finding.rule().id()).toList());
     }
 
     @Test
     void everyFindingCarriesTheEntryAndFieldItConcerns() throws IOException {
-        Finding finding = run(RuleSet.all(), SLOPPY).findings().getFirst();
+        Finding finding = new JabFix(RuleSet.all()).apply(parse(SLOPPY)).findings().getFirst();
 
         assertEquals("key", finding.citationKey());
         assertEquals("author", finding.field().orElseThrow().getName());
         assertTrue(finding.isFixable());
     }
 
-    /// Without any rules JabFix still normalizes what serialization decides -- entry type case and
-    /// value delimiters -- but touches no value.
+    /// What a repair changed is what an undo manager collects.
     @Test
-    void emptyRuleSetOnlyReformats() throws IOException {
-        assertEquals("""
-                @Article{key,
-                  author = { Doe, Jane },
-                  year   = {2024},
-                }
-                """, run(RuleSet.of(), SLOPPY).formatted());
+    void reportsWhatEveryRepairChanged() throws IOException {
+        JabFixResult result = new JabFix(RuleSet.all()).apply(parse(SLOPPY));
+
+        assertEquals(List.of(" Doe, Jane "), result.changes().stream().map(FieldChange::oldValue).toList());
+        assertEquals(List.of("Doe, Jane"), result.changes().stream().map(FieldChange::newValue).toList());
     }
 
-    /// Parses `bibtex` and runs JabFix over it, normalizing the line separator so that the expected
-    /// values can be written as text blocks no matter which platform the test runs on.
-    private JabFixResult run(RuleSet ruleSet, String bibtex) throws IOException {
-        BibDatabaseContext databaseContext = new BibtexParser(importFormatPreferences)
+    @Test
+    void anEmptyRuleSetChangesNothing() throws IOException {
+        List<BibEntry> entries = parse(SLOPPY);
+
+        JabFixResult result = new JabFix(RuleSet.of()).apply(entries);
+
+        assertEquals(" Doe, Jane ", entries.getFirst().getField(StandardField.AUTHOR).orElseThrow());
+        assertEquals(List.of(), result.changes());
+    }
+
+    /// Scanning stays on the calling thread; only the repairs are handed to the scheduler, which a
+    /// GUI uses to keep entry mutations on the JavaFX thread.
+    @Test
+    void everyRepairGoesThroughTheMutationScheduler() throws IOException {
+        List<BibEntry> entries = parse(SLOPPY);
+        AtomicInteger scheduled = new AtomicInteger();
+
+        new JabFix(RuleSet.all()).apply(entries, mutation -> {
+            scheduled.incrementAndGet();
+            mutation.run();
+        });
+
+        assertEquals(1, scheduled.get());
+        assertEquals("Doe, Jane", entries.getFirst().getField(StandardField.AUTHOR).orElseThrow());
+    }
+
+    private List<BibEntry> parse(String bibtex) throws IOException {
+        return new BibtexParser(importFormatPreferences)
                 .parse(Reader.of(bibtex))
-                .getDatabaseContext();
-
-        JabFixResult result = new JabFix(
-                ruleSet,
-                fieldPreferences,
-                mock(CitationKeyPatternPreferences.class, Answers.RETURNS_DEEP_STUBS),
-                new BibEntryTypesManager())
-                .run(databaseContext);
-
-        return new JabFixResult(result.findings(), result.formatted().replace("\r\n", "\n"));
+                .getDatabaseContext()
+                .getEntries();
     }
 }
