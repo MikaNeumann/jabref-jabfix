@@ -6,6 +6,7 @@ import org.jabref.logic.cleanup.FieldFormatterCleanup;
 import org.jabref.logic.formatter.bibtexfields.ClearFormatter;
 import org.jabref.logic.formatter.bibtexfields.NormalizePagesFormatter;
 import org.jabref.logic.formatter.bibtexfields.TrimWhitespaceFormatter;
+import org.jabref.model.FieldChange;
 import org.jabref.model.entry.BibEntry;
 import org.jabref.model.entry.field.InternalField;
 import org.jabref.model.entry.field.StandardField;
@@ -44,6 +45,17 @@ class SaveActionRuleTest {
         normalizePages.scan(entry).forEach(finding -> finding.fix().orElseThrow().applyTo(entry));
 
         assertEquals("21--45", entry.getField(StandardField.PAGES).orElseThrow());
+    }
+
+    /// What the repair changed is what an undo manager collects.
+    @Test
+    void theFixReportsTheChangeItMade() {
+        BibEntry entry = new BibEntry(StandardEntryType.Article).withField(StandardField.PAGES, "21-45");
+
+        FieldChange change = normalizePages.scan(entry).getFirst().fix().orElseThrow().applyTo(entry).orElseThrow();
+
+        assertEquals("21-45", change.oldValue());
+        assertEquals("21--45", change.newValue());
     }
 
     @Test
