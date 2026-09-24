@@ -4,6 +4,8 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 
+import org.jabref.logic.bibtex.FieldPreferences;
+import org.jabref.logic.lint.rules.RepeatedWhitespaceRule;
 import org.jabref.logic.lint.rules.SurroundingWhitespaceRule;
 
 import org.jspecify.annotations.NullMarked;
@@ -19,19 +21,19 @@ import org.jspecify.annotations.NullMarked;
 @NullMarked
 public class RuleSet {
 
-    /// Every rule shipped with JabFix.
-    private static final List<Rule> BUILT_IN = List.of(
-            new SurroundingWhitespaceRule());
-
     private final List<Rule> rules;
 
     private RuleSet(List<Rule> rules) {
         this.rules = List.copyOf(rules);
     }
 
-    /// The default: every rule JabFix ships with.
-    public static RuleSet all() {
-        return new RuleSet(BUILT_IN);
+    /// The default: every rule JabFix ships with, in the order a save has always applied them.
+    ///
+    /// @param fieldPreferences tells the whitespace rules which fields hold text that may be wrapped
+    public static RuleSet all(FieldPreferences fieldPreferences) {
+        return new RuleSet(List.of(
+                new SurroundingWhitespaceRule(),
+                new RepeatedWhitespaceRule(fieldPreferences)));
     }
 
     /// Exactly the given rules, in the given order. An empty set reformats without applying any

@@ -113,7 +113,7 @@ class JabFixCommand implements Callable<Integer> {
     /// would let the user believe a rule had been switched off while it kept running.
     private RuleSet selectedRules() throws CliException {
         try {
-            return RuleSet.all().without(disabledRules);
+            return RuleSet.all(jabKit.cliPreferences.getFieldPreferences()).without(disabledRules);
         } catch (UnknownRuleException e) {
             LOGGER.debug("Rejecting unknown rule id", e);
             throw new CliException(e.getMessage(),

@@ -32,26 +32,28 @@ class JabFixTest {
             }
             """;
 
+    private static final FieldPreferences FIELD_PREFERENCES = new FieldPreferences(true, List.of(), List.of());
+
     private ImportFormatPreferences importFormatPreferences;
 
     @BeforeEach
     void setUp() {
         importFormatPreferences = mock(ImportFormatPreferences.class, Answers.RETURNS_DEEP_STUBS);
-        when(importFormatPreferences.fieldPreferences()).thenReturn(new FieldPreferences(true, List.of(), List.of()));
+        when(importFormatPreferences.fieldPreferences()).thenReturn(FIELD_PREFERENCES);
     }
 
     @Test
     void repairsWhatTheRulesReport() throws IOException {
         List<BibEntry> entries = parse(SLOPPY);
 
-        new JabFix(RuleSet.all()).apply(entries);
+        new JabFix(RuleSet.all(FIELD_PREFERENCES)).apply(entries);
 
         assertEquals("Doe, Jane", entries.getFirst().getField(StandardField.AUTHOR).orElseThrow());
     }
 
     @Test
     void reportsWhatItRepaired() throws IOException {
-        JabFixResult result = new JabFix(RuleSet.all()).apply(parse(SLOPPY));
+        JabFixResult result = new JabFix(RuleSet.all(FIELD_PREFERENCES)).apply(parse(SLOPPY));
 
         assertEquals(List.of("surrounding-whitespace"),
                 result.findings().stream().map(finding -> finding.rule().id()).toList());
@@ -59,7 +61,7 @@ class JabFixTest {
 
     @Test
     void everyFindingCarriesTheEntryAndFieldItConcerns() throws IOException {
-        Finding finding = new JabFix(RuleSet.all()).apply(parse(SLOPPY)).findings().getFirst();
+        Finding finding = new JabFix(RuleSet.all(FIELD_PREFERENCES)).apply(parse(SLOPPY)).findings().getFirst();
 
         assertEquals("key", finding.citationKey());
         assertEquals("author", finding.field().orElseThrow().getName());
@@ -69,7 +71,7 @@ class JabFixTest {
     /// What a repair changed is what an undo manager collects.
     @Test
     void reportsWhatEveryRepairChanged() throws IOException {
-        JabFixResult result = new JabFix(RuleSet.all()).apply(parse(SLOPPY));
+        JabFixResult result = new JabFix(RuleSet.all(FIELD_PREFERENCES)).apply(parse(SLOPPY));
 
         assertEquals(List.of(" Doe, Jane "), result.changes().stream().map(FieldChange::oldValue).toList());
         assertEquals(List.of("Doe, Jane"), result.changes().stream().map(FieldChange::newValue).toList());
@@ -92,7 +94,7 @@ class JabFixTest {
         List<BibEntry> entries = parse(SLOPPY);
         AtomicInteger scheduled = new AtomicInteger();
 
-        new JabFix(RuleSet.all()).apply(entries, mutation -> {
+        new JabFix(RuleSet.all(FIELD_PREFERENCES)).apply(entries, mutation -> {
             scheduled.incrementAndGet();
             mutation.run();
         });

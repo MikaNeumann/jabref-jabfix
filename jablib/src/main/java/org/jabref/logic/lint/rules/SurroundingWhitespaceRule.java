@@ -1,5 +1,6 @@
 package org.jabref.logic.lint.rules;
 
+import org.jabref.logic.formatter.bibtexfields.TrimWhitespaceFormatter;
 import org.jabref.logic.lint.rule.FieldValueRule;
 
 import org.jspecify.annotations.NullMarked;
@@ -14,6 +15,10 @@ import org.jspecify.annotations.NullMarked;
 @NullMarked
 public class SurroundingWhitespaceRule extends FieldValueRule {
 
+    /// The formatter a save has always used for this, so that a library formatted by JabFix and one
+    /// saved by JabRef come out the same.
+    private static final TrimWhitespaceFormatter TRIM = new TrimWhitespaceFormatter();
+
     @Override
     public String id() {
         return "surrounding-whitespace";
@@ -26,7 +31,7 @@ public class SurroundingWhitespaceRule extends FieldValueRule {
 
     @Override
     protected String normalize(String value) {
-        return value.strip();
+        return TRIM.format(value);
     }
 
     @Override

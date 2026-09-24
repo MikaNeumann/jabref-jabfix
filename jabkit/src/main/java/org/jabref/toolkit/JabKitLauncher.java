@@ -88,7 +88,8 @@ public class JabKitLauncher {
             applyUsageFooters(commandLine,
                     ImportService.getAvailableImportFormats(preferences),
                     ExportService.create(preferences, true).getAvailableExportFormats(),
-                    WebFetchers.getSearchBasedFetchers(preferences.getImportFormatPreferences(), preferences.getImporterPreferences()));
+                    WebFetchers.getSearchBasedFetchers(preferences.getImportFormatPreferences(), preferences.getImporterPreferences()),
+                    RuleSet.all(preferences.getFieldPreferences()));
 
             // Show help when no arguments are given. Placed after header and footer setup
             // to ensure output matches --help command
@@ -118,7 +119,8 @@ public class JabKitLauncher {
     private static void applyUsageFooters(CommandLine commandLine,
                                           List<Pair<String, String>> inputFormats,
                                           List<Pair<String, String>> outputFormats,
-                                          Set<SearchBasedFetcher> fetchers) {
+                                          Set<SearchBasedFetcher> fetchers,
+                                          RuleSet rules) {
 
         final String INPUT_FOOTER_LABEL = Localization.lang("Available import formats:");
         final String OUTPUT_FOOTER_LABEL = Localization.lang("Available output formats:");
@@ -160,7 +162,7 @@ public class JabKitLauncher {
         commandLine.getSubcommands().get("jabfix")
                    .getCommandSpec().usageMessage().footer("\n"
                            + Localization.lang("The following rules are available:") + "\n"
-                           + StringUtil.alignStringTable(RuleSet.all().rules().stream()
+                           + StringUtil.alignStringTable(rules.rules().stream()
                                                                 .map(rule -> new Pair<>(rule.id(), rule.description()))
                                                                 .toList()));
     }
