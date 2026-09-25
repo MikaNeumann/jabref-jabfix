@@ -1,9 +1,14 @@
 package org.jabref.logic.lint.rule;
 
 import java.util.List;
+import java.util.Map;
 
 import org.jabref.logic.bibtex.FieldPreferences;
 import org.jabref.model.entry.BibEntry;
+import org.jabref.model.entry.field.StandardField;
+import org.jabref.model.entry.types.StandardEntryType;
+import org.jabref.model.metadata.LintSettings;
+import org.jabref.model.metadata.RuleMode;
 
 import org.junit.jupiter.api.Test;
 
@@ -69,6 +74,54 @@ class RuleSetTest {
     void anExternalRuleCanBeSwitchedOffByIdLikeAnyOther() throws UnknownRuleException {
         assertEquals(List.of("surrounding-whitespace", "repeated-whitespace"),
                 RuleSet.all(FIELD_PREFERENCES).with(EXTERNAL).without(List.of("external")).ids());
+    }
+
+    @Test
+    void asConfiguredByDropsTheRulesTheLibrarySwitchedOff() {
+        LintSettings settings = new LintSettings(true, Map.of("surrounding-whitespace", RuleMode.OFF));
+
+        assertEquals(List.of("repeated-whitespace"),
+                RuleSet.all(FIELD_PREFERENCES).asConfiguredBy(settings).ids());
+    }
+
+    /// A checked rule stays in the run under its own id -- it only stops repairing.
+    @Test
+    void asConfiguredByKeepsACheckedRuleButTakesItsRepairAway() {
+        LintSettings settings = new LintSettings(true, Map.of("surrounding-whitespace", RuleMode.CHECK));
+        BibEntry entry = new BibEntry(StandardEntryType.Article).withField(StandardField.TITLE, " A Title ");
+
+        List<Finding> findings = RuleSet.all(FIELD_PREFERENCES).asConfiguredBy(settings).rules().getFirst().scan(entry);
+
+        assertEquals(List.of("surrounding-whitespace"), findings.stream().map(finding -> finding.rule().id()).toList());
+        assertEquals(List.of(false), findings.stream().map(Finding::isFixable).toList());
+    }
+
+    @Test
+    void asConfiguredByLeavesARuleTheLibraryDoesNotNameRepairing() {
+        BibEntry entry = new BibEntry(StandardEntryType.Article).withField(StandardField.TITLE, " A Title ");
+
+        List<Finding> findings = RuleSet.all(FIELD_PREFERENCES).asConfiguredBy(LintSettings.ENABLED)
+                                        .rules().getFirst().scan(entry);
+
+        assertEquals(List.of(true), findings.stream().map(Finding::isFixable).toList());
+    }
+
+    /// The settings may have been written by a JabFix that knows a rule this one does not.
+    @Test
+    void asConfiguredByPassesOverAnIdThatNamesNoRule() {
+        LintSettings settings = new LintSettings(true, Map.of("rule-of-a-newer-jabfix", RuleMode.OFF));
+
+        assertEquals(RuleSet.all(FIELD_PREFERENCES).ids(),
+                RuleSet.all(FIELD_PREFERENCES).asConfiguredBy(settings).ids());
+    }
+
+    /// Unlike a library's own settings: what a user just typed is held against the rules.
+    @Test
+    void rejectUnknownRejectsAnIdThatNamesNoRule() {
+        UnknownRuleException exception = assertThrows(UnknownRuleException.class,
+                () -> RuleSet.all(FIELD_PREFERENCES).rejectUnknown(List.of("surounding-whitespace")));
+
+        assertEquals(List.of("surounding-whitespace"), exception.getUnknownIds());
     }
 
     @Test

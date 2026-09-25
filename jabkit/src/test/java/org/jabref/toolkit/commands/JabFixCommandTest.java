@@ -46,6 +46,27 @@ class JabFixCommandTest extends AbstractJabKitTest {
         assertTrue(formatted.contains("author = { Knuth, Donald E. },"), formatted);
     }
 
+    /// The value stays as it was, and the finding is said out loud instead of passing unseen.
+    @Test
+    void checkOnlyReportsARuleWithoutApplyingIt() {
+        assertEquals(CommandLine.ExitCode.OK,
+                commandLine.executeToLog("jabfix", "--check-only", "surrounding-whitespace", inputFile));
+
+        String formatted = commandLine.getStandardOutput();
+        assertTrue(formatted.contains("author = { Knuth, Donald E. },"), formatted);
+        String reported = commandLine.getErrorOutput();
+        assertTrue(reported.contains("[surrounding-whitespace]"), reported);
+    }
+
+    @Test
+    void anIdThatNamesNoRuleIsAUsageErrorForCheckOnlyToo() {
+        assertEquals(CommandLine.ExitCode.USAGE,
+                commandLine.executeToLog("jabfix", "--check-only", "surounding-whitespace", inputFile));
+
+        String errors = commandLine.getErrorOutput();
+        assertTrue(errors.contains("surounding-whitespace"), errors);
+    }
+
     /// Split into two ids, of which only the misspelled one is unknown.
     @Test
     void disableTakesACommaSeparatedList() {
