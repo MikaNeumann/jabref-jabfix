@@ -1124,6 +1124,25 @@ class BibDatabaseWriterTest {
         assertEquals("Doe, Jane", entry.getField(StandardField.AUTHOR).orElseThrow());
     }
 
+    /// A magic comment above an entry is an exception to a rule of the library, which the writer
+    /// applying the Save Actions itself could not honour.
+    @Test
+    void aMagicCommentSwitchesASaveActionOffForItsEntry() throws IOException {
+        metaData.setSaveActions(new FieldFormatterCleanupActions(true, List.of(
+                new FieldFormatterCleanup(StandardField.TITLE, new LowerCaseFormatter()))));
+        BibEntry exempt = new BibEntry(StandardEntryType.Article)
+                .withField(StandardField.TITLE, "SOME TITLE")
+                .withUserComments("% jabref-format-ignore lower-case");
+        BibEntry other = new BibEntry(StandardEntryType.Article).withField(StandardField.TITLE, "ANOTHER TITLE");
+        database.insertEntries(exempt, other);
+
+        metaData.setLintSettings(LintSettings.ENABLED);
+        databaseWriter.writeDatabase(bibtexContext);
+
+        assertEquals("SOME TITLE", exempt.getField(StandardField.TITLE).orElseThrow());
+        assertEquals("another title", other.getField(StandardField.TITLE).orElseThrow());
+    }
+
     /// The undo manager of the GUI collects these, so a repair has to reach the same list a Save
     /// Action reaches for a library that asks for no rules.
     @Test
