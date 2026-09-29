@@ -1033,7 +1033,7 @@ class BibDatabaseWriterTest {
         BibEntry entry = new BibEntry(StandardEntryType.Article).withField(StandardField.TITLE, "SOME TITLE");
         database.insertEntry(entry);
 
-        metaData.setLintSettings(LintSettings.ENABLED);
+        metaData.setLintSettings(new LintSettings(Map.of("title-lower-case", RuleMode.FIX)));
         databaseWriter.writeDatabase(bibtexContext);
 
         assertEquals("some title", entry.getField(StandardField.TITLE).orElseThrow());
@@ -1049,7 +1049,7 @@ class BibDatabaseWriterTest {
         BibEntry entry = new BibEntry(StandardEntryType.Article).withField(StandardField.TITLE, "SOME TITLE");
         database.insertEntry(entry);
 
-        metaData.setLintSettings(new LintSettings(true, Map.of("title-lower-case", RuleMode.OFF)));
+        metaData.setLintSettings(new LintSettings(Map.of("title-lower-case", RuleMode.OFF)));
         databaseWriter.writeDatabase(bibtexContext);
 
         assertEquals("SOME TITLE", entry.getField(StandardField.TITLE).orElseThrow());
@@ -1065,7 +1065,7 @@ class BibDatabaseWriterTest {
         BibEntry entry = new BibEntry(StandardEntryType.Article).withField(StandardField.TITLE, "SOME TITLE");
         database.insertEntry(entry);
 
-        metaData.setLintSettings(new LintSettings(true, Map.of("title-lower-case", RuleMode.CHECK)));
+        metaData.setLintSettings(new LintSettings(Map.of("title-lower-case", RuleMode.CHECK)));
         databaseWriter.writeDatabase(bibtexContext);
 
         assertEquals("SOME TITLE", entry.getField(StandardField.TITLE).orElseThrow());
@@ -1081,7 +1081,7 @@ class BibDatabaseWriterTest {
                 new FieldFormatterCleanup(StandardField.TITLE, new LowerCaseFormatter()))));
         database.insertEntry(new BibEntry(StandardEntryType.Article).withField(StandardField.TITLE, "SOME TITLE"));
 
-        metaData.setLintSettings(new LintSettings(true, Map.of("title-lower-case", RuleMode.CHECK)));
+        metaData.setLintSettings(new LintSettings(Map.of("title-lower-case", RuleMode.CHECK)));
         databaseWriter.writeDatabase(bibtexContext);
 
         assertEquals(List.of(false),
@@ -1100,7 +1100,7 @@ class BibDatabaseWriterTest {
                 .withField(StandardField.AUTHOR, " Doe, Jane ");
         database.insertEntry(entry);
 
-        metaData.setLintSettings(new LintSettings(true, Map.of(
+        metaData.setLintSettings(new LintSettings(Map.of(
                 "title-lower-case", RuleMode.CHECK,
                 "journal-upper-case", RuleMode.FIX,
                 "surrounding-whitespace", RuleMode.OFF)));
@@ -1112,13 +1112,15 @@ class BibDatabaseWriterTest {
     }
 
     /// A stored setting may name a rule a newer JabFix has and this one does not; the library still
-    /// has to save.
+    /// has to save, and the rules it does know still run.
     @Test
     void aModeForARuleThatDoesNotExistIsPassedOver() throws IOException {
         BibEntry entry = new BibEntry(StandardEntryType.Article).withField(StandardField.AUTHOR, " Doe, Jane ");
         database.insertEntry(entry);
 
-        metaData.setLintSettings(new LintSettings(true, Map.of("rule-of-a-newer-jabfix", RuleMode.CHECK)));
+        metaData.setLintSettings(new LintSettings(Map.of(
+                "rule-of-a-newer-jabfix", RuleMode.CHECK,
+                "surrounding-whitespace", RuleMode.FIX)));
         databaseWriter.writeDatabase(bibtexContext);
 
         assertEquals("Doe, Jane", entry.getField(StandardField.AUTHOR).orElseThrow());
@@ -1132,7 +1134,7 @@ class BibDatabaseWriterTest {
                 new FieldFormatterCleanup(StandardField.TITLE, new LowerCaseFormatter()))));
         database.insertEntry(new BibEntry(StandardEntryType.Article).withField(StandardField.TITLE, "SOME TITLE"));
 
-        metaData.setLintSettings(LintSettings.ENABLED);
+        metaData.setLintSettings(new LintSettings(Map.of("title-lower-case", RuleMode.FIX)));
         databaseWriter.writeDatabase(bibtexContext);
 
         assertEquals(List.of("some title"),
@@ -1151,7 +1153,7 @@ class BibDatabaseWriterTest {
             scheduledMutations.incrementAndGet();
             mutation.run();
         });
-        metaData.setLintSettings(LintSettings.ENABLED);
+        metaData.setLintSettings(new LintSettings(Map.of("title-lower-case", RuleMode.FIX)));
         databaseWriter.writeDatabase(bibtexContext);
 
         assertEquals(1, scheduledMutations.get());
@@ -1166,12 +1168,13 @@ class BibDatabaseWriterTest {
         BibEntry entry = new BibEntry(StandardEntryType.Article).withField(StandardField.AUTHOR, "Doe, Jane");
         database.insertEntry(entry);
 
-        metaData.setLintSettings(LintSettings.ENABLED);
+        metaData.setLintSettings(new LintSettings(Map.of("surrounding-whitespace", RuleMode.FIX)));
         databaseWriter.writeDatabase(bibtexContext);
 
         assertEquals(Optional.empty(), entry.getCitationKey());
     }
 
+    /// Carrying no settings at all, that is: the save applies its own Save Actions, as always.
     // [utest->req~logic.exporter.lint-on-save~1]
     @Test
     void aLibraryThatAsksForNoRulesIsSavedAsAlways() throws IOException {

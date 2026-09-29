@@ -25,7 +25,8 @@ Rules run once each, in `RuleSet` order, and must be idempotent.
 The asking is `LintSettings` in the library's `MetaData`, next to its Save Actions:
 
 ```java
-databaseContext.getMetaData().setLintSettings(LintSettings.ENABLED);
+databaseContext.getMetaData().setLintSettings(new LintSettings(Map.of(
+        "surrounding-whitespace", RuleMode.FIX)));
 
 BibDatabaseWriter writer = new BibDatabaseWriter(...);
 writer.writeDatabase(databaseContext);
@@ -34,15 +35,16 @@ List<Finding> findings = writer.getFindings();
 
 The writer resolves the settings into a rule set itself, with `RuleSet.forLibrary`, which carries the library's own Save Actions into the run, and `RuleSet.asConfiguredBy`, which lets each rule go as far as the library allows.
 
-`LintSettings` holds one `RuleMode` per rule id, and a rule the library does not name repairs what it finds:
+`LintSettings` holds one `RuleMode` per rule id, and a rule runs only where the library names it:
 
-| Mode    | What the rule does                                           |
-|---------|--------------------------------------------------------------|
-| `OFF`   | does not run: nothing reported, nothing changed              |
-| `CHECK` | reports what it finds and changes nothing                    |
-| `FIX`   | reports and repairs — what a rule does unless said otherwise |
+| Mode    | What the rule does                                      |
+|---------|---------------------------------------------------------|
+| `OFF`   | does not run — the same as not naming it, said out loud |
+| `CHECK` | reports what it finds and changes nothing               |
+| `FIX`   | reports what it finds and repairs it                    |
 
 So a library can have three rules report and three others repair, in one place per rule.
+A library that carries no settings has nothing done to it, which is how every library written before this reads.
 A checked rule is wrapped by `CheckOnlyRule`, which takes the `Fix` off its findings, so the run then handles them the way it already handles a rule that knows no repair: `jabkit fix` says them out loud instead of letting them pass unseen in the output.
 This is also where the value a rule takes will go, once rules take any — it belongs to the entry that configures the rule, not to a list beside it.
 
@@ -51,7 +53,7 @@ An id naming no rule of this JabFix is passed over rather than rejected, so that
 For such a library the rules are the only thing that changes an entry: the writer applies neither the Save Actions nor its whitespace cleanup on its own, and it generates no citation keys and abbreviates no journals, because nothing may be changed that no rule reported.
 What a repair changed is reported as a `FieldChange`, the same way a Save Action's change is, so that it can be undone, and every mutation goes through the writer's mutation scheduler, so a GUI can keep them on the JavaFX thread.
 
-A library that carries no settings, or has them switched off, is saved the way it always was.
+A library that carries no settings is saved the way it always was; carrying them at all is what asks for anything to be done, so there is no flag to switch off.
 Layout is normalized by `BibDatabaseWriter` either way, so a library JabFix has already formatted produces no diff.
 
 `LintSettings` are not written to the `.bib` file yet — `jabkit fix` sets them on the library it has just read.

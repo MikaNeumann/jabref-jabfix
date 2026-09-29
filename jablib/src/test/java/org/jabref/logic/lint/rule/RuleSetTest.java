@@ -77,8 +77,19 @@ class RuleSetTest {
     }
 
     @Test
-    void asConfiguredByDropsTheRulesTheLibrarySwitchedOff() {
-        LintSettings settings = new LintSettings(true, Map.of("surrounding-whitespace", RuleMode.OFF));
+    void asConfiguredByKeepsOnlyTheRulesTheLibraryNames() {
+        LintSettings settings = new LintSettings(Map.of("repeated-whitespace", RuleMode.FIX));
+
+        assertEquals(List.of("repeated-whitespace"),
+                RuleSet.all(FIELD_PREFERENCES).asConfiguredBy(settings).ids());
+    }
+
+    /// Saying it out loud is the same as not naming the rule at all.
+    @Test
+    void asConfiguredByDropsARuleTheLibrarySwitchedOff() {
+        LintSettings settings = new LintSettings(Map.of(
+                "surrounding-whitespace", RuleMode.OFF,
+                "repeated-whitespace", RuleMode.FIX));
 
         assertEquals(List.of("repeated-whitespace"),
                 RuleSet.all(FIELD_PREFERENCES).asConfiguredBy(settings).ids());
@@ -87,7 +98,7 @@ class RuleSetTest {
     /// A checked rule stays in the run under its own id -- it only stops repairing.
     @Test
     void asConfiguredByKeepsACheckedRuleButTakesItsRepairAway() {
-        LintSettings settings = new LintSettings(true, Map.of("surrounding-whitespace", RuleMode.CHECK));
+        LintSettings settings = new LintSettings(Map.of("surrounding-whitespace", RuleMode.CHECK));
         BibEntry entry = new BibEntry(StandardEntryType.Article).withField(StandardField.TITLE, " A Title ");
 
         List<Finding> findings = RuleSet.all(FIELD_PREFERENCES).asConfiguredBy(settings).rules().getFirst().scan(entry);
@@ -96,22 +107,32 @@ class RuleSetTest {
         assertEquals(List.of(false), findings.stream().map(Finding::isFixable).toList());
     }
 
+    /// A rule repairs where the library asks it to, which is what it does not do on its own.
     @Test
-    void asConfiguredByLeavesARuleTheLibraryDoesNotNameRepairing() {
+    void asConfiguredByLeavesTheRepairOfARuleTheLibraryWantsFixed() {
+        LintSettings settings = new LintSettings(Map.of("surrounding-whitespace", RuleMode.FIX));
         BibEntry entry = new BibEntry(StandardEntryType.Article).withField(StandardField.TITLE, " A Title ");
 
-        List<Finding> findings = RuleSet.all(FIELD_PREFERENCES).asConfiguredBy(LintSettings.ENABLED)
+        List<Finding> findings = RuleSet.all(FIELD_PREFERENCES).asConfiguredBy(settings)
                                         .rules().getFirst().scan(entry);
 
         assertEquals(List.of(true), findings.stream().map(Finding::isFixable).toList());
     }
 
+    /// A library that names nothing has nothing done to it.
+    @Test
+    void asConfiguredByRunsNoRuleTheLibraryDoesNotName() {
+        assertEquals(List.of(), RuleSet.all(FIELD_PREFERENCES).asConfiguredBy(new LintSettings(Map.of())).ids());
+    }
+
     /// The settings may have been written by a JabFix that knows a rule this one does not.
     @Test
     void asConfiguredByPassesOverAnIdThatNamesNoRule() {
-        LintSettings settings = new LintSettings(true, Map.of("rule-of-a-newer-jabfix", RuleMode.OFF));
+        LintSettings settings = new LintSettings(Map.of(
+                "rule-of-a-newer-jabfix", RuleMode.FIX,
+                "surrounding-whitespace", RuleMode.FIX));
 
-        assertEquals(RuleSet.all(FIELD_PREFERENCES).ids(),
+        assertEquals(List.of("surrounding-whitespace"),
                 RuleSet.all(FIELD_PREFERENCES).asConfiguredBy(settings).ids());
     }
 

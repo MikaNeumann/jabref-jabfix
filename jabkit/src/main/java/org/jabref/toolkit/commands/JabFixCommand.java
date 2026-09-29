@@ -87,10 +87,10 @@ class JabFixCommand implements Callable<Integer> {
         ParserResult parserResult = ImportService.importBibTexFile(inputFile, jabKit.cliPreferences, quiet);
 
         BibDatabaseContext databaseContext = parserResult.getDatabaseContext();
-        // Asking the library to apply the rules is all it takes; the writer builds them. The ids
-        // are held against the rules first, which needs the library, since its own Save Actions are
-        // rules of this run and the options cover them like any other.
-        databaseContext.getMetaData().setLintSettings(new LintSettings(true, selectedModes(databaseContext)));
+        // Asking the library to apply the rules is all it takes; the writer builds them. Which
+        // rules there are needs the library, since its own Save Actions are rules of this run and
+        // the options cover them like any other.
+        databaseContext.getMetaData().setLintSettings(new LintSettings(selectedModes(databaseContext)));
 
         try {
             // Only the parsed library in memory is changed here; nothing reaches disk unless
@@ -119,18 +119,22 @@ class JabFixCommand implements Callable<Integer> {
         }
     }
 
-    /// How far each rule named on the command line goes: `--disable` switches one off, and
-    /// `--check-only` leaves it reporting what it finds. Every other rule repairs, as always.
+    /// How far each rule of the run goes.
+    ///
+    /// A rule runs only where it is named, so this command names every rule the library has -- its
+    /// own Save Actions and the rules JabFix ships with -- and lets each repair. `--check-only`
+    /// leaves one reporting what it finds, and `--disable` takes one out of the run.
     ///
     /// A misspelled id is a usage error, not something to pass over: leaving it unreported would let
     /// the user believe a rule had been switched off while it kept running. A library's own settings
     /// are treated more leniently -- see [RuleSet#asConfiguredBy].
     private Map<String, RuleMode> selectedModes(BibDatabaseContext databaseContext) throws CliException {
+        RuleSet rules = RuleSet.forLibrary(databaseContext, jabKit.cliPreferences.getFieldPreferences());
         try {
-            RuleSet.forLibrary(databaseContext, jabKit.cliPreferences.getFieldPreferences())
-                   .rejectUnknown(Stream.concat(disabledRules.stream(), checkOnlyRules.stream()).toList());
+            rules.rejectUnknown(Stream.concat(disabledRules.stream(), checkOnlyRules.stream()).toList());
 
             Map<String, RuleMode> modes = new HashMap<>();
+            rules.ids().forEach(ruleId -> modes.put(ruleId, RuleMode.FIX));
             checkOnlyRules.forEach(ruleId -> modes.put(ruleId, RuleMode.CHECK));
             // A rule named by both is switched off: the stricter of the two wins, and saying so in
             // the one place that reads both keeps it from being a question anywhere else.
