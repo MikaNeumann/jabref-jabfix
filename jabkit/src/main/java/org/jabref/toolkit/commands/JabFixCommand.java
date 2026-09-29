@@ -43,7 +43,7 @@ import static picocli.CommandLine.ParentCommand;
 /// Exit codes follow the other checking commands: 0 = nothing to do, 1 = the library is not clean
 /// (`--check` only), 2/3 = error.
 @NullMarked
-@Command(name = "jabfix", description = "Lint and format a BibTeX library.")
+@Command(name = "fix", description = "Lint and format a BibTeX library.")
 class JabFixCommand implements Callable<Integer> {
     private static final Logger LOGGER = LoggerFactory.getLogger(JabFixCommand.class);
 

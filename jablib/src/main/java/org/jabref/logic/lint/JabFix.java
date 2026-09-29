@@ -12,7 +12,7 @@ import org.jabref.model.entry.BibEntry;
 
 import org.jspecify.annotations.NullMarked;
 
-/// Engine behind the `jabkit jabfix` command: applies a [RuleSet] to the entries of a library.
+/// Engine behind the `jabkit fix` command: applies a [RuleSet] to the entries of a library.
 ///
 /// The rules decide the questions the `.bib` format leaves open but that survive parsing -- such as
 /// whether a value may be padded with whitespace. Serialization is not this class's business: it is

@@ -157,9 +157,9 @@ public class JabKitLauncher {
                                      .filter(name -> !"Search pre-configured".equals(name))
                                      .collect(Collectors.joining(", ")));
 
-        // `jabfix` is configured by rule id, so the ids -- and what each one does -- have to be
+        // `fix` is configured by rule id, so the ids -- and what each one does -- have to be
         // discoverable from `--help` alone.
-        commandLine.getSubcommands().get("jabfix")
+        commandLine.getSubcommands().get("fix")
                    .getCommandSpec().usageMessage().footer("\n"
                            + Localization.lang("The following rules are available:") + "\n"
                            + StringUtil.alignStringTable(rules.rules().stream()

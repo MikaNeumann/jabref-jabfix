@@ -96,7 +96,7 @@ Needs: impl
 ## Linting and formatting a library
 `req~jabkit.cli.jabfix~1`
 
-`jabkit jabfix` checks a library against a set of rules and rewrites it to follow them.
+`jabkit fix` checks a library against a set of rules and rewrites it to follow them.
 Each finding names the rule that reported it by a stable id.
 Formatting applies exactly the repairs that `--check` reports, and `--check` exits with 1 if the library would change.
 `--disable` switches rules off by id; an id that names no rule is a usage error.

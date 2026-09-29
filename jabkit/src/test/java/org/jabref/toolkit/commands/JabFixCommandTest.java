@@ -31,7 +31,7 @@ class JabFixCommandTest extends AbstractJabKitTest {
 
     @Test
     void everyRuleRunsByDefault() {
-        assertEquals(CommandLine.ExitCode.OK, commandLine.executeToLog("jabfix", inputFile));
+        assertEquals(CommandLine.ExitCode.OK, commandLine.executeToLog("fix", inputFile));
 
         String formatted = commandLine.getStandardOutput();
         assertTrue(formatted.contains("author = {Knuth, Donald E.},"), formatted);
@@ -40,7 +40,7 @@ class JabFixCommandTest extends AbstractJabKitTest {
     @Test
     void disableSwitchesARuleOff() {
         assertEquals(CommandLine.ExitCode.OK,
-                commandLine.executeToLog("jabfix", "--disable", "surrounding-whitespace", inputFile));
+                commandLine.executeToLog("fix", "--disable", "surrounding-whitespace", inputFile));
 
         String formatted = commandLine.getStandardOutput();
         assertTrue(formatted.contains("author = { Knuth, Donald E. },"), formatted);
@@ -50,7 +50,7 @@ class JabFixCommandTest extends AbstractJabKitTest {
     @Test
     void checkOnlyReportsARuleWithoutApplyingIt() {
         assertEquals(CommandLine.ExitCode.OK,
-                commandLine.executeToLog("jabfix", "--check-only", "surrounding-whitespace", inputFile));
+                commandLine.executeToLog("fix", "--check-only", "surrounding-whitespace", inputFile));
 
         String formatted = commandLine.getStandardOutput();
         assertTrue(formatted.contains("author = { Knuth, Donald E. },"), formatted);
@@ -61,7 +61,7 @@ class JabFixCommandTest extends AbstractJabKitTest {
     @Test
     void anIdThatNamesNoRuleIsAUsageErrorForCheckOnlyToo() {
         assertEquals(CommandLine.ExitCode.USAGE,
-                commandLine.executeToLog("jabfix", "--check-only", "surounding-whitespace", inputFile));
+                commandLine.executeToLog("fix", "--check-only", "surounding-whitespace", inputFile));
 
         String errors = commandLine.getErrorOutput();
         assertTrue(errors.contains("surounding-whitespace"), errors);
@@ -71,7 +71,7 @@ class JabFixCommandTest extends AbstractJabKitTest {
     @Test
     void disableTakesACommaSeparatedList() {
         assertEquals(CommandLine.ExitCode.USAGE,
-                commandLine.executeToLog("jabfix", "--disable", "surrounding-whitespace,surounding-whitespace", inputFile));
+                commandLine.executeToLog("fix", "--disable", "surrounding-whitespace,surounding-whitespace", inputFile));
 
         String errors = commandLine.getErrorOutput();
         assertTrue(errors.contains("Unknown rule: surounding-whitespace."), errors);
@@ -82,7 +82,7 @@ class JabFixCommandTest extends AbstractJabKitTest {
     @Test
     void anIdThatNamesNoRuleIsAUsageError() {
         assertEquals(CommandLine.ExitCode.USAGE,
-                commandLine.executeToLog("jabfix", "--disable", "surounding-whitespace", inputFile));
+                commandLine.executeToLog("fix", "--disable", "surounding-whitespace", inputFile));
 
         String errors = commandLine.getErrorOutput();
         assertTrue(errors.contains("surounding-whitespace"), errors);
@@ -91,7 +91,7 @@ class JabFixCommandTest extends AbstractJabKitTest {
 
     @Test
     void checkNamesTheRuleBehindEveryFinding() {
-        assertEquals(1, commandLine.executeToLog("jabfix", "--check", "-p", inputFile));
+        assertEquals(1, commandLine.executeToLog("fix", "--check", "-p", inputFile));
 
         String findings = commandLine.getStandardOutput();
         assertTrue(findings.contains("[surrounding-whitespace]"), findings);
@@ -108,7 +108,7 @@ class JabFixCommandTest extends AbstractJabKitTest {
                 }
                 """);
 
-        assertEquals(CommandLine.ExitCode.OK, commandLine.executeToLog("jabfix", library.toString()));
+        assertEquals(CommandLine.ExitCode.OK, commandLine.executeToLog("fix", library.toString()));
 
         // The database type is written although the input never named it: the importer infers it for
         // a file that declares none, so even a clean library grows this line.
@@ -131,9 +131,9 @@ class JabFixCommandTest extends AbstractJabKitTest {
                 }
                 """);
 
-        assertEquals(CommandLine.ExitCode.OK, commandLine.executeToLog("jabfix", "--in-place", library.toString()));
+        assertEquals(CommandLine.ExitCode.OK, commandLine.executeToLog("fix", "--in-place", library.toString()));
         String once = Files.readString(library);
-        assertEquals(CommandLine.ExitCode.OK, commandLine.executeToLog("jabfix", "--in-place", library.toString()));
+        assertEquals(CommandLine.ExitCode.OK, commandLine.executeToLog("fix", "--in-place", library.toString()));
 
         assertEquals(once, Files.readString(library));
     }
@@ -141,6 +141,6 @@ class JabFixCommandTest extends AbstractJabKitTest {
     @Test
     void inPlaceAndCheckCannotBeCombined() {
         assertEquals(CommandLine.ExitCode.USAGE,
-                commandLine.executeToLog("jabfix", "--in-place", "--check", inputFile));
+                commandLine.executeToLog("fix", "--in-place", "--check", inputFile));
     }
 }

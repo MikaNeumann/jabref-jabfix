@@ -43,10 +43,10 @@ The writer resolves the settings into a rule set itself, with `RuleSet.forLibrar
 | `FIX`   | reports and repairs — what a rule does unless said otherwise |
 
 So a library can have three rules report and three others repair, in one place per rule.
-A checked rule is wrapped by `CheckOnlyRule`, which takes the `Fix` off its findings, so the run then handles them the way it already handles a rule that knows no repair: `jabkit jabfix` says them out loud instead of letting them pass unseen in the output.
+A checked rule is wrapped by `CheckOnlyRule`, which takes the `Fix` off its findings, so the run then handles them the way it already handles a rule that knows no repair: `jabkit fix` says them out loud instead of letting them pass unseen in the output.
 This is also where the value a rule takes will go, once rules take any — it belongs to the entry that configures the rule, not to a list beside it.
 
-An id naming no rule of this JabFix is passed over rather than rejected, so that a library configured by a newer JabFix still saves with an older one; an id a user typed is held against the rules instead, which is what makes `jabkit jabfix --disable typo` a usage error.
+An id naming no rule of this JabFix is passed over rather than rejected, so that a library configured by a newer JabFix still saves with an older one; an id a user typed is held against the rules instead, which is what makes `jabkit fix --disable typo` a usage error.
 
 For such a library the rules are the only thing that changes an entry: the writer applies neither the Save Actions nor its whitespace cleanup on its own, and it generates no citation keys and abbreviates no journals, because nothing may be changed that no rule reported.
 What a repair changed is reported as a `FieldChange`, the same way a Save Action's change is, so that it can be undone, and every mutation goes through the writer's mutation scheduler, so a GUI can keep them on the JavaFX thread.
@@ -54,12 +54,12 @@ What a repair changed is reported as a `FieldChange`, the same way a Save Action
 A library that carries no settings, or has them switched off, is saved the way it always was.
 Layout is normalized by `BibDatabaseWriter` either way, so a library JabFix has already formatted produces no diff.
 
-`LintSettings` are not written to the `.bib` file yet — `jabkit jabfix` sets them on the library it has just read.
+`LintSettings` are not written to the `.bib` file yet — `jabkit fix` sets them on the library it has just read.
 Storing them in a `jabref-meta` entry is the next step.
 
 ## The CLI
 
-`jabkit jabfix [--check | --in-place] [--disable RULE,...] [--check-only RULE,...] FILE`.
+`jabkit fix [--check | --in-place] [--disable RULE,...] [--check-only RULE,...] FILE`.
 
 `--disable` and `--check-only` set the mode of a rule for that run, and cover the library's Save Actions too, since they are rules of the run.
 A rule named by both is switched off.
