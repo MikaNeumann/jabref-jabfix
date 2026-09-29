@@ -105,9 +105,12 @@ public class RuleSet {
     public RuleSet asConfiguredBy(LintSettings settings) {
         return new RuleSet(rules.stream()
                                 .flatMap(rule -> switch (settings.modeOf(rule.id())) {
-                                    case OFF -> Stream.<Rule>empty();
-                                    case CHECK -> Stream.<Rule>of(new CheckOnlyRule(rule));
-                                    case FIX -> Stream.of(rule);
+                                    case OFF ->
+                                            Stream.<Rule>empty();
+                                    case CHECK ->
+                                            Stream.<Rule>of(new CheckOnlyRule(rule));
+                                    case FIX ->
+                                            Stream.of(rule);
                                 })
                                 .toList());
     }
