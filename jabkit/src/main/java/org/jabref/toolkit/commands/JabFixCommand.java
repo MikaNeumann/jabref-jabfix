@@ -20,8 +20,8 @@ import org.jabref.logic.l10n.Localization;
 import org.jabref.logic.lint.rule.Finding;
 import org.jabref.logic.lint.rule.RuleSet;
 import org.jabref.logic.lint.rule.UnknownRuleException;
+import org.jabref.logic.util.ErrorFormat;
 import org.jabref.model.database.BibDatabaseContext;
-import org.jabref.model.entry.field.Field;
 import org.jabref.model.metadata.LintSettings;
 import org.jabref.model.metadata.RuleMode;
 import org.jabref.toolkit.exception.CliException;
@@ -99,12 +99,12 @@ class JabFixCommand implements Callable<Integer> {
             List<Finding> findings = library.findings();
 
             if (checkOnly) {
-                return check(inputFile, findings, library.formatted());
+                return check(inputFile, findings, library.formatted(), parserResult);
             }
 
             // A rule that found something it cannot repair has to be said out loud, since it will
             // not show up in the output the way an applied fix does.
-            report(inputFile, findings.stream().filter(finding -> !finding.isFixable()).toList(), System.err);
+            report(inputFile, findings.stream().filter(finding -> !finding.isFixable()).toList(), parserResult, System.err);
 
             if (inPlace) {
                 return write(inputFile, library.formatted());
@@ -171,8 +171,8 @@ class JabFixCommand implements Callable<Integer> {
         return new SerializedLibrary(stringWriter.toString(), databaseWriter.getFindings());
     }
 
-    private int check(Path inputFile, List<Finding> findings, String formatted) throws IOException {
-        report(inputFile, findings, System.out);
+    private int check(Path inputFile, List<Finding> findings, String formatted, ParserResult parserResult) throws IOException {
+        report(inputFile, findings, parserResult, System.out);
 
         // Findings alone are not the whole story: reformatting alters things no rule reports on,
         // such as entry type capitalization, so the serialized result has to be compared as well.
@@ -196,16 +196,26 @@ class JabFixCommand implements Callable<Integer> {
         return CommandLine.ExitCode.OK;
     }
 
-    /// Writes one line per finding, in the `file: location: message` shape editors and CI log
-    /// scrapers expect, with the rule id appended so that a reader knows what to switch off.
-    private void report(Path inputFile, List<Finding> findings, PrintStream target) {
+    /// Writes one line per finding, in the same `file:line:column:citationKey[:field]: message`
+    /// format the `check` commands use, with the rule id appended so that a reader knows what to
+    /// switch off.
+    // [impl->req~jabkit.cli.check-errorformat-output~1]
+    private void report(Path inputFile, List<Finding> findings, ParserResult parserResult, PrintStream target) {
         for (Finding finding : findings) {
-            target.println("%s: %s: %s: %s [%s]".formatted(
+            target.println(ErrorFormat.line(
                     inputFile,
+                    rangeOf(finding, parserResult),
                     finding.citationKey(),
-                    finding.field().map(Field::getName).orElse("-"),
-                    finding.message(),
-                    finding.rule().id()));
+                    finding.field(),
+                    "%s [%s]".formatted(finding.message(), finding.rule().id())));
         }
+    }
+
+    /// Where the finding is in the file the library was read from: the field it is about, or the
+    /// entry as a whole for a finding that names no field.
+    private static ParserResult.Range rangeOf(Finding finding, ParserResult parserResult) {
+        return finding.field()
+                      .map(field -> parserResult.getFieldRange(finding.entry(), field))
+                      .orElseGet(() -> parserResult.getCompleteEntryIndicator(finding.entry()));
     }
 }

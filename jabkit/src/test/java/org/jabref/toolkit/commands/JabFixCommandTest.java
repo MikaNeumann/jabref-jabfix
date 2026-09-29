@@ -89,12 +89,21 @@ class JabFixCommandTest extends AbstractJabKitTest {
         assertTrue(errors.contains("surrounding-whitespace"), errors);
     }
 
+    /// A finding says where it is, in the `file:line:column:citationKey:field: message` format the
+    /// `check` commands use, so an editor or a CI log scraper can jump to it.
     @Test
-    void checkNamesTheRuleBehindEveryFinding() {
-        assertEquals(1, commandLine.executeToLog("fix", "--check", "-p", inputFile));
+    void checkReportsWhereEveryFindingIs(@TempDir Path tempDir) throws IOException {
+        Path library = Files.writeString(tempDir.resolve("sloppy.bib"), """
+                @Article{knuth1984,
+                  author = { Knuth, Donald E. },
+                }
+                """);
 
-        String findings = commandLine.getStandardOutput();
-        assertTrue(findings.contains("[surrounding-whitespace]"), findings);
+        assertEquals(1, commandLine.executeToLog("fix", "--check", "-p", library.toString()));
+
+        assertEquals(List.of(library + ":2:3:knuth1984:author: value has leading or trailing whitespace [surrounding-whitespace]"),
+                commandLine.getStandardOutput().replace("\r\n", "\n").lines()
+                           .filter(line -> line.contains("[")).toList());
     }
 
     /// Serialization is the writer's half of the work: entry type capitalization, value delimiters,

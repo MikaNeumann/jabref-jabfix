@@ -37,10 +37,10 @@ The writer resolves the settings into a rule set itself, with `RuleSet.forLibrar
 
 `LintSettings` holds one `RuleMode` per rule id, and a rule the library does not name repairs what it finds:
 
-| Mode    | What the rule does                                    |
-|---------|-------------------------------------------------------|
-| `OFF`   | does not run: nothing reported, nothing changed        |
-| `CHECK` | reports what it finds and changes nothing              |
+| Mode    | What the rule does                                           |
+|---------|--------------------------------------------------------------|
+| `OFF`   | does not run: nothing reported, nothing changed              |
+| `CHECK` | reports what it finds and changes nothing                    |
 | `FIX`   | reports and repairs — what a rule does unless said otherwise |
 
 So a library can have three rules report and three others repair, in one place per rule.
@@ -80,6 +80,9 @@ A comment that switches nothing off is reported by `magic-comment`, because the 
 ## The CLI
 
 `jabkit fix [--check | --in-place] [--disable RULE,...] [--check-only RULE,...] FILE`.
+
+Findings are written one per line, in the `file:line:column:citationKey[:field]: message [rule-id]` format the `check` commands use, so an editor or a CI log scraper can jump to the place at fault.
+Where that place is comes from the `ParserResult` of the file the library was read from, through `ErrorFormat`, which the integrity and consistency checks report through as well.
 
 `--disable` and `--check-only` set the mode of a rule for that run, and cover the library's Save Actions too, since they are rules of the run.
 A rule named by both is switched off.
