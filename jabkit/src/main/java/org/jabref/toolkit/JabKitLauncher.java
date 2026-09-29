@@ -163,8 +163,8 @@ public class JabKitLauncher {
                    .getCommandSpec().usageMessage().footer("\n"
                            + Localization.lang("The following rules are available:") + "\n"
                            + StringUtil.alignStringTable(rules.rules().stream()
-                                                                .map(rule -> new Pair<>(rule.id(), rule.description()))
-                                                                .toList()));
+                                                              .map(rule -> new Pair<>(rule.id(), rule.description()))
+                                                              .toList()));
     }
 
     private static boolean hasCommandOption(CommandLine.Model.CommandSpec commandSpec, String optionName) {
