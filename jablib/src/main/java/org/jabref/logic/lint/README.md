@@ -61,13 +61,15 @@ Storing them in a `jabref-meta` entry is the next step.
 
 ## The CLI
 
-`jabkit fix [--check | --in-place] [--disable RULE,...] [--check-only RULE,...] FILE`.
+`jabkit fix [--check | --in-place] [--enable RULE,...] [--disable RULE,...] [--check-only RULE,...] FILE`.
 
 Findings are written one per line, in the `file:line:column:citationKey[:field]: message [rule-id]` format the `check` commands use, so an editor or a CI log scraper can jump to the place at fault.
 Where that place is comes from the `ParserResult` of the file the library was read from, through `ErrorFormat`, which the integrity and consistency checks report through as well.
 
-`--disable` and `--check-only` set the mode of a rule for that run, and cover the library's Save Actions too, since they are rules of the run.
-A rule named by both is switched off.
+`--enable`, `--disable` and `--check-only` set the mode of a rule for that run, and cover the library's Save Actions too, since they are rules of the run.
+Without `--enable` the command names every rule the library has, which is what makes a bare `jabkit fix` format it; with it, the named rules are the only ones that run.
+`--check-only` names a rule as well, so one left out of `--enable` still reports what it finds.
+A rule named by several of them is switched off: the strictest wins.
 `--check` is the whole run: every rule reports and nothing is written, whatever the modes say.
 
 ## Goal
@@ -89,7 +91,7 @@ Still missing:
 - built-in rules beyond whitespace,
 - library-level rules (`Rule#scan` sees one entry),
 - context for rules (file directories, abbreviation list, key patterns), which citation key generation and journal abbreviation need before they can become rules,
-- configuration beyond `--disable`, including rule parameters and where the settings are stored,
+- configuration beyond the command line, including rule parameters and where the settings are stored,
 - GUI integration: `BibDatabaseWriter` reads the settings, but no GUI save writes them yet,
 - leaving out metadata JabRef only inferred (the database type); writing it back changes libraries that are otherwise clean.
 

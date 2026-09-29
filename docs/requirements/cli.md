@@ -100,6 +100,7 @@ Needs: impl
 `jabkit fix` checks a library against a set of rules and rewrites it to follow them.
 Each finding says where it is and names the rule that reported it by a stable id.
 Formatting applies exactly the repairs that `--check` reports, and `--check` exits with 1 if the library would change.
+`--enable` names the rules to apply, and without it every rule the library has is applied.
 `--disable` switches rules off by id and `--check-only` leaves a rule reporting without repairing; an id that names no rule is a usage error.
 
 Needs: impl

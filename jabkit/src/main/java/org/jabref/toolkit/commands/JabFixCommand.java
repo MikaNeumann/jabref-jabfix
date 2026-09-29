@@ -62,6 +62,10 @@ class JabFixCommand implements Callable<Integer> {
     @Option(names = {"--check"}, description = "Report what is wrong without writing anything.")
     private boolean checkOnly;
 
+    @Option(names = {"--enable"}, split = ",", paramLabel = "RULE",
+            description = "Rule to apply, which then are the only ones applied. Repeatable, and accepts a comma-separated list. Without it, every rule the library has is applied. The available rules are listed below.")
+    private List<String> enabledRules = List.of();
+
     @Option(names = {"--disable"}, split = ",", paramLabel = "RULE",
             description = "Rule to switch off. Repeatable, and accepts a comma-separated list. The available rules are listed below.")
     private List<String> disabledRules = List.of();
@@ -121,9 +125,14 @@ class JabFixCommand implements Callable<Integer> {
 
     /// How far each rule of the run goes.
     ///
-    /// A rule runs only where it is named, so this command names every rule the library has -- its
-    /// own Save Actions and the rules JabFix ships with -- and lets each repair. `--check-only`
-    /// leaves one reporting what it finds, and `--disable` takes one out of the run.
+    /// A rule runs only where it is named. Naming none, this command names every rule the library
+    /// has -- its own Save Actions and the rules JabFix ships with -- and lets each repair, which
+    /// is what makes a bare `jabkit fix` format a library. `--enable` names them instead, and then
+    /// they are the only ones that run.
+    ///
+    /// `--check-only` leaves a rule reporting what it finds without repairing it, and names it too:
+    /// a rule `--enable` left out still runs if `--check-only` asks for it. `--disable` takes one
+    /// out of the run whatever else named it.
     ///
     /// A misspelled id is a usage error, not something to pass over: leaving it unreported would let
     /// the user believe a rule had been switched off while it kept running. A library's own settings
@@ -131,13 +140,17 @@ class JabFixCommand implements Callable<Integer> {
     private Map<String, RuleMode> selectedModes(BibDatabaseContext databaseContext) throws CliException {
         RuleSet rules = RuleSet.forLibrary(databaseContext, jabKit.cliPreferences.getFieldPreferences());
         try {
-            rules.rejectUnknown(Stream.concat(disabledRules.stream(), checkOnlyRules.stream()).toList());
+            rules.rejectUnknown(Stream.of(enabledRules, checkOnlyRules, disabledRules)
+                                      .flatMap(List::stream)
+                                      .toList());
 
             Map<String, RuleMode> modes = new HashMap<>();
-            rules.ids().forEach(ruleId -> modes.put(ruleId, RuleMode.FIX));
+            (enabledRules.isEmpty() ? rules.ids() : enabledRules)
+                    .forEach(ruleId -> modes.put(ruleId, RuleMode.FIX));
             checkOnlyRules.forEach(ruleId -> modes.put(ruleId, RuleMode.CHECK));
-            // A rule named by both is switched off: the stricter of the two wins, and saying so in
-            // the one place that reads both keeps it from being a question anywhere else.
+            // A rule named by several options is switched off: the strictest of them wins, and
+            // saying so in the one place that reads them all keeps it from being a question
+            // anywhere else.
             disabledRules.forEach(ruleId -> modes.put(ruleId, RuleMode.OFF));
             return modes;
         } catch (UnknownRuleException e) {
