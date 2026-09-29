@@ -83,6 +83,7 @@ class MetaDataOverwriteWithTest {
         metaData.setCiteKeyPattern(new CitationKeyPattern("[auth]", CitationKeyPattern.Category.AUTHOR_RELATED),
                 Map.of(StandardEntryType.Article, new CitationKeyPattern("[auth][year]", CitationKeyPattern.Category.AUTHOR_RELATED)));
         metaData.setSaveActions(new FieldFormatterCleanupActions(true, List.of()));
+        metaData.setLintSettings(new LintSettings(true, Map.of("surrounding-whitespace", RuleMode.CHECK)));
         metaData.setMode(BibDatabaseMode.BIBLATEX);
         metaData.setLibraryAbbreviationType(AbbreviationType.DOTLESS);
         metaData.setKeywordSeparator(';');

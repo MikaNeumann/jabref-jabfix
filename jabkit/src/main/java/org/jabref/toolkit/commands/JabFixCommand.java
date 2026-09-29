@@ -2,20 +2,28 @@ package org.jabref.toolkit.commands;
 
 import java.io.IOException;
 import java.io.PrintStream;
+import java.io.StringWriter;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.Callable;
+import java.util.stream.Stream;
 
+import org.jabref.logic.exporter.BibDatabaseWriter;
+import org.jabref.logic.exporter.BibWriter;
+import org.jabref.logic.exporter.SelfContainedSaveConfiguration;
 import org.jabref.logic.importer.ParserResult;
 import org.jabref.logic.l10n.Localization;
-import org.jabref.logic.lint.JabFix;
-import org.jabref.logic.lint.JabFixResult;
 import org.jabref.logic.lint.rule.Finding;
 import org.jabref.logic.lint.rule.RuleSet;
 import org.jabref.logic.lint.rule.UnknownRuleException;
+import org.jabref.model.database.BibDatabaseContext;
 import org.jabref.model.entry.field.Field;
+import org.jabref.model.metadata.LintSettings;
+import org.jabref.model.metadata.RuleMode;
 import org.jabref.toolkit.exception.CliException;
 import org.jabref.toolkit.exception.ImportServiceException;
 import org.jabref.toolkit.service.ImportService;
@@ -58,6 +66,10 @@ class JabFixCommand implements Callable<Integer> {
             description = "Rule to switch off. Repeatable, and accepts a comma-separated list. The available rules are listed below.")
     private List<String> disabledRules = List.of();
 
+    @Option(names = {"--check-only"}, split = ",", paramLabel = "RULE",
+            description = "Rule that only reports what it finds, without repairing it. Repeatable, and accepts a comma-separated list.")
+    private List<String> checkOnlyRules = List.of();
+
     // [impl->req~jabkit.cli.jabfix~1]
     @Override
     public Integer call() throws ImportServiceException, CliException {
@@ -67,7 +79,6 @@ class JabFixCommand implements Callable<Integer> {
                     CommandLine.ExitCode.USAGE);
         }
 
-        RuleSet ruleSet = selectedRules();
         Path inputFile = inputOption.getInputFile(jabKit.cliPreferences);
 
         // Without --in-place or --check the formatted library itself goes to stdout, so the
@@ -75,30 +86,31 @@ class JabFixCommand implements Callable<Integer> {
         boolean quiet = sharedOptions.porcelain || !(inPlace || checkOnly);
         ParserResult parserResult = ImportService.importBibTexFile(inputFile, jabKit.cliPreferences, quiet);
 
-        JabFix jabFix = new JabFix(
-                ruleSet,
-                jabKit.cliPreferences.getFieldPreferences(),
-                jabKit.cliPreferences.getCitationKeyPatternPreferences(),
-                jabKit.entryTypesManager);
+        BibDatabaseContext databaseContext = parserResult.getDatabaseContext();
+        // Asking the library to apply the rules is all it takes; the writer builds them. The ids
+        // are held against the rules first, which needs the library, since its own Save Actions are
+        // rules of this run and the options cover them like any other.
+        databaseContext.getMetaData().setLintSettings(new LintSettings(true, selectedModes(databaseContext)));
 
         try {
             // Only the parsed library in memory is changed here; nothing reaches disk unless
             // --in-place says so, which is what lets --check reuse the very same run.
-            JabFixResult result = jabFix.run(parserResult.getDatabaseContext());
+            SerializedLibrary library = serialize(databaseContext);
+            List<Finding> findings = library.findings();
 
             if (checkOnly) {
-                return check(inputFile, result);
+                return check(inputFile, findings, library.formatted());
             }
 
             // A rule that found something it cannot repair has to be said out loud, since it will
             // not show up in the output the way an applied fix does.
-            report(inputFile, result.findings().stream().filter(finding -> !finding.isFixable()).toList(), System.err);
+            report(inputFile, findings.stream().filter(finding -> !finding.isFixable()).toList(), System.err);
 
             if (inPlace) {
-                return write(inputFile, result.formatted());
+                return write(inputFile, library.formatted());
             }
 
-            System.out.print(result.formatted());
+            System.out.print(library.formatted());
             System.out.flush();
             return CommandLine.ExitCode.OK;
         } catch (IOException e) {
@@ -107,11 +119,23 @@ class JabFixCommand implements Callable<Integer> {
         }
     }
 
-    /// A misspelled rule id is a usage error, not something to pass over: leaving it unreported
-    /// would let the user believe a rule had been switched off while it kept running.
-    private RuleSet selectedRules() throws CliException {
+    /// How far each rule named on the command line goes: `--disable` switches one off, and
+    /// `--check-only` leaves it reporting what it finds. Every other rule repairs, as always.
+    ///
+    /// A misspelled id is a usage error, not something to pass over: leaving it unreported would let
+    /// the user believe a rule had been switched off while it kept running. A library's own settings
+    /// are treated more leniently -- see [RuleSet#asConfiguredBy].
+    private Map<String, RuleMode> selectedModes(BibDatabaseContext databaseContext) throws CliException {
         try {
-            return RuleSet.all().without(disabledRules);
+            RuleSet.forLibrary(databaseContext, jabKit.cliPreferences.getFieldPreferences())
+                   .rejectUnknown(Stream.concat(disabledRules.stream(), checkOnlyRules.stream()).toList());
+
+            Map<String, RuleMode> modes = new HashMap<>();
+            checkOnlyRules.forEach(ruleId -> modes.put(ruleId, RuleMode.CHECK));
+            // A rule named by both is switched off: the stricter of the two wins, and saying so in
+            // the one place that reads both keeps it from being a question anywhere else.
+            disabledRules.forEach(ruleId -> modes.put(ruleId, RuleMode.OFF));
+            return modes;
         } catch (UnknownRuleException e) {
             LOGGER.debug("Rejecting unknown rule id", e);
             throw new CliException(e.getMessage(),
@@ -122,14 +146,39 @@ class JabFixCommand implements Callable<Integer> {
         }
     }
 
-    private int check(Path inputFile, JabFixResult result) throws IOException {
-        report(inputFile, result.findings(), System.out);
+    /// What a save of the library produces: the text, and what the rules reported while producing it.
+    private record SerializedLibrary(String formatted, List<Finding> findings) {
+    }
+
+    /// Writes the library, which applies the rules it asks for on the way, since that is what a save
+    /// of it does.
+    ///
+    /// Reformatting on save rewrites every entry; without it the writer would keep the serialization
+    /// each entry had in the input file, which is exactly what is to be replaced.
+    private SerializedLibrary serialize(BibDatabaseContext databaseContext) throws IOException {
+        StringWriter stringWriter = new StringWriter();
+        SelfContainedSaveConfiguration saveConfiguration =
+                (SelfContainedSaveConfiguration) new SelfContainedSaveConfiguration().withReformatOnSave(true);
+
+        BibDatabaseWriter databaseWriter = new BibDatabaseWriter(
+                new BibWriter(stringWriter, databaseContext.getDatabase().getNewLineSeparator()),
+                saveConfiguration,
+                jabKit.cliPreferences.getFieldPreferences(),
+                jabKit.cliPreferences.getCitationKeyPatternPreferences(),
+                jabKit.entryTypesManager);
+        databaseWriter.writeDatabase(databaseContext);
+
+        return new SerializedLibrary(stringWriter.toString(), databaseWriter.getFindings());
+    }
+
+    private int check(Path inputFile, List<Finding> findings, String formatted) throws IOException {
+        report(inputFile, findings, System.out);
 
         // Findings alone are not the whole story: reformatting alters things no rule reports on,
         // such as entry type capitalization, so the serialized result has to be compared as well.
-        boolean formattingDiffers = !result.formatted().equals(Files.readString(inputFile, StandardCharsets.UTF_8));
+        boolean formattingDiffers = !formatted.equals(Files.readString(inputFile, StandardCharsets.UTF_8));
 
-        if (result.findings().isEmpty() && !formattingDiffers) {
+        if (findings.isEmpty() && !formattingDiffers) {
             if (!sharedOptions.porcelain) {
                 System.out.println(Localization.lang("'%0' is already formatted.", inputFile));
             }

@@ -3,21 +3,16 @@ package org.jabref.logic.lint;
 import java.io.IOException;
 import java.io.Reader;
 import java.util.List;
-import java.util.Optional;
-import java.util.Set;
-import java.util.stream.Collectors;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import org.jabref.logic.bibtex.FieldPreferences;
-import org.jabref.logic.citationkeypattern.CitationKeyPatternPreferences;
 import org.jabref.logic.importer.ImportFormatPreferences;
 import org.jabref.logic.importer.fileformat.BibtexParser;
 import org.jabref.logic.lint.rule.Finding;
-import org.jabref.logic.lint.rule.Rule;
 import org.jabref.logic.lint.rule.RuleSet;
-import org.jabref.model.database.BibDatabaseContext;
+import org.jabref.model.FieldChange;
 import org.jabref.model.entry.BibEntry;
-import org.jabref.model.entry.BibEntryTypesManager;
-import org.jabref.model.entry.field.InternalField;
+import org.jabref.model.entry.field.StandardField;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -30,28 +25,6 @@ import static org.mockito.Mockito.when;
 
 class JabFixTest {
 
-    /// Reports every field of an entry, so that a magic comment naming one field can be told apart
-    /// from one naming the rule as a whole.
-    private static final Rule EVERY_FIELD = new Rule() {
-        @Override
-        public String id() {
-            return "every-field";
-        }
-
-        @Override
-        public String description() {
-            return "Reports every field of an entry.";
-        }
-
-        @Override
-        public List<Finding> scan(BibEntry entry) {
-            return entry.getFields().stream()
-                        .filter(field -> field != InternalField.KEY_FIELD)
-                        .map(field -> new Finding(this, entry, Optional.of(field), "reported", Optional.empty()))
-                        .toList();
-        }
-    };
-
     private static final String SLOPPY = """
             @ARTICLE{key,
             author = " Doe, Jane ",
@@ -59,198 +32,81 @@ class JabFixTest {
             }
             """;
 
-    private FieldPreferences fieldPreferences;
+    private static final FieldPreferences FIELD_PREFERENCES = new FieldPreferences(true, List.of(), List.of());
+
     private ImportFormatPreferences importFormatPreferences;
 
     @BeforeEach
     void setUp() {
-        fieldPreferences = new FieldPreferences(true, List.of(), List.of());
         importFormatPreferences = mock(ImportFormatPreferences.class, Answers.RETURNS_DEEP_STUBS);
-        when(importFormatPreferences.fieldPreferences()).thenReturn(fieldPreferences);
+        when(importFormatPreferences.fieldPreferences()).thenReturn(FIELD_PREFERENCES);
     }
 
     @Test
-    void runNormalizesSerializationAndAppliesRules() throws IOException {
-        assertEquals("""
-                @Article{key,
-                  author = {Doe, Jane},
-                  year   = {2024},
-                }
-                """, run(RuleSet.all(), SLOPPY).formatted());
+    void repairsWhatTheRulesReport() throws IOException {
+        List<BibEntry> entries = parse(SLOPPY);
+
+        new JabFix(RuleSet.all(FIELD_PREFERENCES)).apply(entries);
+
+        assertEquals("Doe, Jane", entries.getFirst().getField(StandardField.AUTHOR).orElseThrow());
     }
 
     @Test
-    void runIsIdempotent() throws IOException {
-        String once = run(RuleSet.all(), SLOPPY).formatted();
-        assertEquals(once, run(RuleSet.all(), once).formatted());
-    }
+    void reportsWhatItRepaired() throws IOException {
+        JabFixResult result = new JabFix(RuleSet.all(FIELD_PREFERENCES)).apply(parse(SLOPPY));
 
-    @Test
-    void runReportsWhatItRepaired() throws IOException {
-        List<String> ruleIds = run(RuleSet.all(), SLOPPY).findings().stream()
-                                                         .map(finding -> finding.rule().id())
-                                                         .toList();
-
-        assertEquals(List.of("surrounding-whitespace"), ruleIds);
+        assertEquals(List.of("surrounding-whitespace"),
+                result.findings().stream().map(finding -> finding.rule().id()).toList());
     }
 
     @Test
     void everyFindingCarriesTheEntryAndFieldItConcerns() throws IOException {
-        Finding finding = run(RuleSet.all(), SLOPPY).findings().getFirst();
+        Finding finding = new JabFix(RuleSet.all(FIELD_PREFERENCES)).apply(parse(SLOPPY)).findings().getFirst();
 
         assertEquals("key", finding.citationKey());
         assertEquals("author", finding.field().orElseThrow().getName());
         assertTrue(finding.isFixable());
     }
 
-    /// Without any rules JabFix still normalizes what serialization decides -- entry type case and
-    /// value delimiters -- but touches no value.
+    /// What a repair changed is what an undo manager collects.
     @Test
-    void emptyRuleSetOnlyReformats() throws IOException {
-        assertEquals("""
-                @Article{key,
-                  author = { Doe, Jane },
-                  year   = {2024},
-                }
-                """, run(RuleSet.of(), SLOPPY).formatted());
-    }
+    void reportsWhatEveryRepairChanged() throws IOException {
+        JabFixResult result = new JabFix(RuleSet.all(FIELD_PREFERENCES)).apply(parse(SLOPPY));
 
-    /// A magic comment above an entry switches the rule off for it, so nothing is reported and
-    /// nothing repaired, while the writer still normalizes the serialization.
-    @Test
-    void aMagicCommentSwitchesARuleOffForItsEntry() throws IOException {
-        JabFixResult result = run(RuleSet.all(), """
-                % jabref-format-ignore surrounding-whitespace
-                @ARTICLE{key,
-                author = " Doe, Jane ",
-                    YEAR="2024"
-                }
-                """);
-
-        assertEquals("""
-                % jabref-format-ignore surrounding-whitespace
-                @Article{key,
-                  author = { Doe, Jane },
-                  year   = {2024},
-                }
-                """, result.formatted());
-        assertEquals(List.of(), result.findings());
-    }
-
-    /// `field:rule` covers that one field, and leaves the rest of the entry to the rule.
-    @Test
-    void aFieldScopedMagicCommentLeavesTheOtherFieldsToTheRule() throws IOException {
-        JabFixResult result = run(RuleSet.of(EVERY_FIELD), """
-                % jabref-format-ignore author:every-field
-                @ARTICLE{key,
-                author = " Doe, Jane ",
-                title = " A Title "
-                }
-                """);
-
-        assertEquals(Set.of("title"),
-                result.findings().stream().map(finding -> finding.field().orElseThrow().getName()).collect(Collectors.toSet()));
+        assertEquals(List.of(" Doe, Jane "), result.changes().stream().map(FieldChange::oldValue).toList());
+        assertEquals(List.of("Doe, Jane"), result.changes().stream().map(FieldChange::newValue).toList());
     }
 
     @Test
-    void aMagicCommentCoversTheFieldsItListsAndTheOnesItsRegexMatches() throws IOException {
-        JabFixResult result = run(RuleSet.of(EVERY_FIELD), """
-                % jabref-format-ignore year,/.*title/:every-field
-                @ARTICLE{key,
-                author = "Doe, Jane",
-                title = "A Title",
-                booktitle = "A Book",
-                year = "2024"
-                }
-                """);
+    void anEmptyRuleSetChangesNothing() throws IOException {
+        List<BibEntry> entries = parse(SLOPPY);
 
-        assertEquals(Set.of("author"),
-                result.findings().stream().map(finding -> finding.field().orElseThrow().getName()).collect(Collectors.toSet()));
+        JabFixResult result = new JabFix(RuleSet.of()).apply(entries);
+
+        assertEquals(" Doe, Jane ", entries.getFirst().getField(StandardField.AUTHOR).orElseThrow());
+        assertEquals(List.of(), result.changes());
     }
 
-    /// BibTeX allows a colon in a field name, where the magic comment otherwise separates fields from rules.
+    /// Scanning stays on the calling thread; only the repairs are handed to the scheduler, which a
+    /// GUI uses to keep entry mutations on the JavaFX thread.
     @Test
-    void aMagicCommentNamesAFieldWhoseNameContainsAColon() throws IOException {
-        JabFixResult result = run(RuleSet.of(EVERY_FIELD), """
-                % jabref-format-ignore note:de:every-field
-                @ARTICLE{key,
-                author = "Doe, Jane",
-                note:de = "eine Notiz"
-                }
-                """);
+    void everyRepairGoesThroughTheMutationScheduler() throws IOException {
+        List<BibEntry> entries = parse(SLOPPY);
+        AtomicInteger scheduled = new AtomicInteger();
 
-        assertEquals(Set.of("author"),
-                result.findings().stream().map(finding -> finding.field().orElseThrow().getName()).collect(Collectors.toSet()));
+        new JabFix(RuleSet.all(FIELD_PREFERENCES)).apply(entries, mutation -> {
+            scheduled.incrementAndGet();
+            mutation.run();
+        });
+
+        assertEquals(1, scheduled.get());
+        assertEquals("Doe, Jane", entries.getFirst().getField(StandardField.AUTHOR).orElseThrow());
     }
 
-    /// The writer trims every field of an entry that a rule changed, which a magic comment cannot
-    /// switch off: only what the rules themselves do is suppressed.
-    @Test
-    void theWriterTrimsEvenASuppressedField() throws IOException {
-        JabFixResult result = run(RuleSet.all(), """
-                % jabref-format-ignore author:surrounding-whitespace
-                @ARTICLE{key,
-                author = " Doe, Jane ",
-                title = " A Title "
-                }
-                """);
-
-        assertEquals("""
-                % jabref-format-ignore author:surrounding-whitespace
-                @Article{key,
-                  author = {Doe, Jane},
-                  title  = {A Title},
-                }
-                """, result.formatted());
-        assertEquals(List.of("title"),
-                result.findings().stream().map(finding -> finding.field().orElseThrow().getName()).toList());
-    }
-
-    /// A comment naming no rule of the run switches nothing off, which is reported rather than
-    /// passed over: the entry is repaired as if the comment were not there.
-    @Test
-    void aMagicCommentThatNamesNoRuleIsReported() throws IOException {
-        JabFixResult result = run(RuleSet.all(), """
-                % jabref-format-ignore surounding-whitespace
-                @ARTICLE{key,
-                author = " Doe, Jane ",
-                    YEAR="2024"
-                }
-                """);
-
-        assertEquals(List.of("magic-comment", "surrounding-whitespace"),
-                result.findings().stream().map(finding -> finding.rule().id()).toList());
-        assertTrue(result.formatted().contains("author = {Doe, Jane},"), result.formatted());
-    }
-
-    @Test
-    void aMagicCommentCanSwitchOffTheReportAboutItself() throws IOException {
-        JabFixResult result = run(RuleSet.all(), """
-                % jabref-format-ignore surounding-whitespace magic-comment
-                @ARTICLE{key,
-                author = " Doe, Jane ",
-                    YEAR="2024"
-                }
-                """);
-
-        assertEquals(List.of("surrounding-whitespace"),
-                result.findings().stream().map(finding -> finding.rule().id()).toList());
-    }
-
-    /// Parses `bibtex` and runs JabFix over it, normalizing the line separator so that the expected
-    /// values can be written as text blocks no matter which platform the test runs on.
-    private JabFixResult run(RuleSet ruleSet, String bibtex) throws IOException {
-        BibDatabaseContext databaseContext = new BibtexParser(importFormatPreferences)
+    private List<BibEntry> parse(String bibtex) throws IOException {
+        return new BibtexParser(importFormatPreferences)
                 .parse(Reader.of(bibtex))
-                .getDatabaseContext();
-
-        JabFixResult result = new JabFix(
-                ruleSet,
-                fieldPreferences,
-                mock(CitationKeyPatternPreferences.class, Answers.RETURNS_DEEP_STUBS),
-                new BibEntryTypesManager())
-                .run(databaseContext);
-
-        return new JabFixResult(result.findings(), result.formatted().replace("\r\n", "\n"));
+                .getDatabaseContext()
+                .getEntries();
     }
 }

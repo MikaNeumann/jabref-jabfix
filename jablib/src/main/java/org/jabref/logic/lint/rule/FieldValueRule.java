@@ -5,6 +5,7 @@ import java.util.List;
 
 import org.jabref.model.entry.BibEntry;
 import org.jabref.model.entry.field.Field;
+import org.jabref.model.entry.field.InternalField;
 
 import org.jspecify.annotations.NullMarked;
 
@@ -24,7 +25,9 @@ public abstract class FieldValueRule implements Rule {
     public List<Finding> scan(BibEntry entry) {
         List<Finding> findings = new ArrayList<>();
         for (Field field : entry.getFields()) {
-            if (!appliesTo(field)) {
+            // A citation key is not a field value: rewriting it invalidates every crossref pointing
+            // at it, which is why JabRef's own field formatters pass over it as well.
+            if ((field == InternalField.KEY_FIELD) || !appliesTo(field)) {
                 continue;
             }
             entry.getField(field).ifPresent(value -> {

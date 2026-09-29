@@ -30,6 +30,19 @@ class SurroundingWhitespaceRuleTest {
         assertEquals("A Title", entry.getField(StandardField.TITLE).orElseThrow());
     }
 
+    /// Rewriting a citation key would invalidate every crossref pointing at it, so the rule passes
+    /// over it just as JabRef's own field formatters do.
+    @Test
+    void leavesTheCitationKeyAlone() {
+        BibEntry entry = new BibEntry(StandardEntryType.Article)
+                .withCitationKey(" key ")
+                .withField(StandardField.TITLE, " A Title ");
+
+        List<Finding> findings = rule.scan(entry);
+
+        assertEquals(List.of(StandardField.TITLE), findings.stream().map(finding -> finding.field().orElseThrow()).toList());
+    }
+
     /// Whitespace between words can be deliberate, so only the ends are touched.
     @Test
     void leavesWhitespaceInsideAValueAlone() {
