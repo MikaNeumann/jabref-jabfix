@@ -4,8 +4,10 @@ import java.io.IOException;
 import java.io.Writer;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Optional;
 
 import org.jabref.logic.importer.ParserResult;
+import org.jabref.logic.util.ErrorFormat;
 import org.jabref.model.entry.field.Field;
 import org.jabref.model.entry.field.InternalField;
 
@@ -26,18 +28,13 @@ public class IntegrityCheckResultErrorFormatWriter extends IntegrityCheckResultW
         for (IntegrityMessage message : messages) {
             // Entry-level findings (e.g. on the citation key itself) carry only the citation key;
             // field-level findings additionally carry the field name.
-            String location = message.entry().getCitationKey().orElse(message.entry().getAuthorTitleYear(5));
             Field field = message.field();
-            ParserResult.Range fieldRange = parserResult.getFieldRange(message.entry(), field);
-            if (field != InternalField.KEY_FIELD) {
-                location += ":" + field.getName();
-            }
-            writer.append("%s:%d:%d:%s: %s\n".formatted(
+            writer.append(ErrorFormat.line(
                     inputFile,
-                    fieldRange.startLine(),
-                    fieldRange.startColumn(),
-                    location,
-                    message.message()));
+                    parserResult.getFieldRange(message.entry(), field),
+                    message.entry().getCitationKey().orElse(message.entry().getAuthorTitleYear(5)),
+                    field == InternalField.KEY_FIELD ? Optional.empty() : Optional.of(field),
+                    message.message()) + "\n");
         }
     }
 }
