@@ -60,14 +60,15 @@ This increases the accessibility. Source: [Accessibility of Command Line Interfa
 
 Needs: impl
 
-## Machine-readable output of the `check` commands
+## Machine-readable output of the checking commands
 `req~jabkit.cli.check-errorformat-output~1`
 
-The `jabkit check` subcommands emit their findings in a line-oriented
+The `jabkit check` subcommands and `jabkit fix` emit their findings in a line-oriented
 `file:line:column:citationKey[:field]: message` format, suitable for editors and CI tooling.
 
 Entry-level findings (for example, on the citation key itself) carry only the citation key.
 Field-level findings additionally carry the affected field name.
+The place a finding points at is the one the library was read from, so it stays valid for the file the user sees even where the finding has already been repaired in memory.
 
 Needs: impl
 
@@ -97,9 +98,9 @@ Needs: impl
 `req~jabkit.cli.jabfix~1`
 
 `jabkit fix` checks a library against a set of rules and rewrites it to follow them.
-Each finding names the rule that reported it by a stable id.
+Each finding says where it is and names the rule that reported it by a stable id.
 Formatting applies exactly the repairs that `--check` reports, and `--check` exits with 1 if the library would change.
-`--disable` switches rules off by id; an id that names no rule is a usage error.
+`--disable` switches rules off by id and `--check-only` leaves a rule reporting without repairing; an id that names no rule is a usage error.
 
 Needs: impl
 
