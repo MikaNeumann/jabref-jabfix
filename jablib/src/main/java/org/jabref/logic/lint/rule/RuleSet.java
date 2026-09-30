@@ -97,8 +97,8 @@ public class RuleSet {
         }
     }
 
-    /// The same rules, as far as `settings` lets each of them go: the ones the library switched off
-    /// are dropped, and the ones it wants checked only report what they find, without repairing it.
+    /// The rules of this set the library asks for, each as far as it lets them go: a rule it does
+    /// not name is dropped, and one it wants checked only reports what it finds, without repairing.
     ///
     /// An id naming no rule of this set is passed over. The settings may have been written by a
     /// JabFix that knows a rule this one does not, and such a library still has to save.

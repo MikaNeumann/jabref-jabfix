@@ -147,10 +147,10 @@ public class BibDatabaseWriter {
         return applySaveActions(List.of(entry), metaData, fieldPreferences, Runnable::run);
     }
 
-    /// What the library asks JabFix to do, empty when it asks for nothing or switched it off. The
-    /// entries are then brought into shape the way a save always did.
+    /// What the library asks JabFix to do, empty when it asks for nothing. The entries are then
+    /// brought into shape the way a save always did.
     private Optional<LintSettings> lintSettings(BibDatabaseContext bibDatabaseContext) {
-        return bibDatabaseContext.getMetaData().getLintSettings().filter(LintSettings::enabled);
+        return bibDatabaseContext.getMetaData().getLintSettings();
     }
 
     /// Brings the entries into the shape the library asks for, before they are written.
@@ -161,9 +161,8 @@ public class BibDatabaseWriter {
                 .orElseGet(() -> applySaveActions(entries, bibDatabaseContext.getMetaData(), fieldPreferences, mutationScheduler));
     }
 
-    /// Applies the rules the library asks for, which are its own Save Actions and the ones JabFix
-    /// ships with, each going as far as the library lets it: switched off, reported only, or
-    /// repaired.
+    /// Applies the rules the library asks for: of its own Save Actions and the rules JabFix ships
+    /// with, the ones it names, each going as far as it says -- reported only, or repaired.
     private List<FieldChange> applyRules(BibDatabaseContext bibDatabaseContext, List<BibEntry> entries, LintSettings settings) {
         RuleSet rules = RuleSet.forLibrary(bibDatabaseContext, fieldPreferences)
                                .asConfiguredBy(settings);
@@ -232,7 +231,7 @@ public class BibDatabaseWriter {
     /// rule reported. Citation keys are not generated and journals not abbreviated for such a
     /// library either -- nothing is changed that no rule reported.
     ///
-    /// @return the findings; empty for a library that asks for no rules, which is saved as always
+    /// @return the findings; empty for a library that carries no settings, which is saved as always
     public List<Finding> getFindings() {
         return Collections.unmodifiableList(findings);
     }

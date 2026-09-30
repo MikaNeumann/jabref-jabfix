@@ -37,6 +37,38 @@ class JabFixCommandTest extends AbstractJabKitTest {
         assertTrue(formatted.contains("author = {Knuth, Donald E.},"), formatted);
     }
 
+    /// Naming one rule leaves the rest of them out, so the whitespace around the author survives.
+    @Test
+    void enableNamesTheOnlyRulesThatRun() {
+        assertEquals(CommandLine.ExitCode.OK,
+                commandLine.executeToLog("fix", "--enable", "repeated-whitespace", inputFile));
+
+        String formatted = commandLine.getStandardOutput();
+        assertTrue(formatted.contains("author = { Knuth, Donald E. },"), formatted);
+    }
+
+    /// `--check-only` names a rule as well, so one left out of `--enable` still reports.
+    @Test
+    void checkOnlyRunsARuleEnableLeftOut() {
+        assertEquals(CommandLine.ExitCode.OK,
+                commandLine.executeToLog("fix", "--enable", "repeated-whitespace",
+                        "--check-only", "surrounding-whitespace", inputFile));
+
+        String formatted = commandLine.getStandardOutput();
+        assertTrue(formatted.contains("author = { Knuth, Donald E. },"), formatted);
+        String reported = commandLine.getErrorOutput();
+        assertTrue(reported.contains("[surrounding-whitespace]"), reported);
+    }
+
+    @Test
+    void anIdThatNamesNoRuleIsAUsageErrorForEnableToo() {
+        assertEquals(CommandLine.ExitCode.USAGE,
+                commandLine.executeToLog("fix", "--enable", "surounding-whitespace", inputFile));
+
+        String errors = commandLine.getErrorOutput();
+        assertTrue(errors.contains("surounding-whitespace"), errors);
+    }
+
     @Test
     void disableSwitchesARuleOff() {
         assertEquals(CommandLine.ExitCode.OK,
