@@ -7,6 +7,7 @@ import java.util.Optional;
 import java.util.Set;
 
 import org.jabref.logic.importer.ParserResult;
+import org.jabref.logic.util.ErrorFormat;
 import org.jabref.model.database.BibDatabaseMode;
 import org.jabref.model.entry.BibEntry;
 import org.jabref.model.entry.BibEntryTypesManager;
@@ -59,13 +60,7 @@ public class BibliographyConsistencyCheckResultErrorFormatWriter extends Bibliog
     }
 
     private void write(ParserResult.Range range, String citationKey, Field field, String message) throws IOException {
-        writer.append("%s:%d:%d:%s:%s: %s\n".formatted(
-                inputFile,
-                range.startLine(),
-                range.startColumn(),
-                citationKey,
-                field.getName(),
-                message));
+        writer.append(ErrorFormat.line(inputFile, range, citationKey, Optional.of(field), message) + "\n");
     }
 
     @Override

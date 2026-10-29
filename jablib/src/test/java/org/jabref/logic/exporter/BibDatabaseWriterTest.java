@@ -12,6 +12,8 @@ import java.nio.file.Path;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import org.jabref.logic.bibtex.FieldPreferences;
@@ -29,7 +31,9 @@ import org.jabref.logic.importer.Importer;
 import org.jabref.logic.importer.ParserResult;
 import org.jabref.logic.importer.fileformat.BibtexImporter;
 import org.jabref.logic.importer.fileformat.BibtexParser;
+import org.jabref.logic.lint.rule.Finding;
 import org.jabref.logic.os.OS;
+import org.jabref.model.FieldChange;
 import org.jabref.model.database.BibDatabase;
 import org.jabref.model.database.BibDatabaseContext;
 import org.jabref.model.database.BibDatabaseMode;
@@ -50,7 +54,9 @@ import org.jabref.model.groups.AllEntriesGroup;
 import org.jabref.model.groups.ExplicitGroup;
 import org.jabref.model.groups.GroupHierarchyType;
 import org.jabref.model.groups.GroupTreeNode;
+import org.jabref.model.metadata.LintSettings;
 import org.jabref.model.metadata.MetaData;
+import org.jabref.model.metadata.RuleMode;
 import org.jabref.model.metadata.SaveOrder;
 import org.jabref.model.util.DummyFileUpdateMonitor;
 
@@ -1015,6 +1021,172 @@ class BibDatabaseWriterTest {
                         "  note = {some note}," + OS.NEWLINE +
                         "}" + OS.NEWLINE,
                 stringWriter.toString());
+    }
+
+    /// For a library that asks for rules, they are the only thing that changes an entry, so its Save
+    /// Actions run as rules -- reported, and repairing exactly what they reported.
+    // [utest->req~logic.exporter.lint-on-save~1]
+    @Test
+    void theLibrarysSaveActionsAreAppliedAsRules() throws IOException {
+        metaData.setSaveActions(new FieldFormatterCleanupActions(true, List.of(
+                new FieldFormatterCleanup(StandardField.TITLE, new LowerCaseFormatter()))));
+        BibEntry entry = new BibEntry(StandardEntryType.Article).withField(StandardField.TITLE, "SOME TITLE");
+        database.insertEntry(entry);
+
+        metaData.setLintSettings(new LintSettings(Map.of("title-lower-case", RuleMode.FIX)));
+        databaseWriter.writeDatabase(bibtexContext);
+
+        assertEquals("some title", entry.getField(StandardField.TITLE).orElseThrow());
+        assertEquals(List.of("title-lower-case"),
+                databaseWriter.getFindings().stream().map(finding -> finding.rule().id()).toList());
+    }
+
+    /// Which is what the writer's own Save Actions cannot express: they are all or nothing.
+    @Test
+    void aSaveActionTheLibrarySwitchedOffIsNotApplied() throws IOException {
+        metaData.setSaveActions(new FieldFormatterCleanupActions(true, List.of(
+                new FieldFormatterCleanup(StandardField.TITLE, new LowerCaseFormatter()))));
+        BibEntry entry = new BibEntry(StandardEntryType.Article).withField(StandardField.TITLE, "SOME TITLE");
+        database.insertEntry(entry);
+
+        metaData.setLintSettings(new LintSettings(Map.of("title-lower-case", RuleMode.OFF)));
+        databaseWriter.writeDatabase(bibtexContext);
+
+        assertEquals("SOME TITLE", entry.getField(StandardField.TITLE).orElseThrow());
+        assertEquals(List.of(), databaseWriter.getFindings());
+    }
+
+    /// A rule the library only wants checked says what it found and leaves the value alone, which
+    /// neither switching it off nor letting it repair can express.
+    @Test
+    void aSaveActionTheLibraryOnlyChecksIsReportedButNotApplied() throws IOException {
+        metaData.setSaveActions(new FieldFormatterCleanupActions(true, List.of(
+                new FieldFormatterCleanup(StandardField.TITLE, new LowerCaseFormatter()))));
+        BibEntry entry = new BibEntry(StandardEntryType.Article).withField(StandardField.TITLE, "SOME TITLE");
+        database.insertEntry(entry);
+
+        metaData.setLintSettings(new LintSettings(Map.of("title-lower-case", RuleMode.CHECK)));
+        databaseWriter.writeDatabase(bibtexContext);
+
+        assertEquals("SOME TITLE", entry.getField(StandardField.TITLE).orElseThrow());
+        assertEquals(List.of("title-lower-case"),
+                databaseWriter.getFindings().stream().map(finding -> finding.rule().id()).toList());
+        assertEquals(List.of(), databaseWriter.getSaveActionsFieldChanges());
+    }
+
+    /// Whoever reports a finding has to be able to tell the two apart.
+    @Test
+    void aFindingOfACheckedRuleSaysItCarriesNoRepair() throws IOException {
+        metaData.setSaveActions(new FieldFormatterCleanupActions(true, List.of(
+                new FieldFormatterCleanup(StandardField.TITLE, new LowerCaseFormatter()))));
+        database.insertEntry(new BibEntry(StandardEntryType.Article).withField(StandardField.TITLE, "SOME TITLE"));
+
+        metaData.setLintSettings(new LintSettings(Map.of("title-lower-case", RuleMode.CHECK)));
+        databaseWriter.writeDatabase(bibtexContext);
+
+        assertEquals(List.of(false),
+                databaseWriter.getFindings().stream().map(Finding::isFixable).toList());
+    }
+
+    /// One library, three rules, three answers -- which is the point of a mode per rule.
+    @Test
+    void oneLibraryCanCheckOneRuleAndRepairAnother() throws IOException {
+        metaData.setSaveActions(new FieldFormatterCleanupActions(true, List.of(
+                new FieldFormatterCleanup(StandardField.TITLE, new LowerCaseFormatter()),
+                new FieldFormatterCleanup(StandardField.JOURNAL, new UpperCaseFormatter()))));
+        BibEntry entry = new BibEntry(StandardEntryType.Article)
+                .withField(StandardField.TITLE, "SOME TITLE")
+                .withField(StandardField.JOURNAL, "a journal")
+                .withField(StandardField.AUTHOR, " Doe, Jane ");
+        database.insertEntry(entry);
+
+        metaData.setLintSettings(new LintSettings(Map.of(
+                "title-lower-case", RuleMode.CHECK,
+                "journal-upper-case", RuleMode.FIX,
+                "surrounding-whitespace", RuleMode.OFF)));
+        databaseWriter.writeDatabase(bibtexContext);
+
+        assertEquals("SOME TITLE", entry.getField(StandardField.TITLE).orElseThrow());
+        assertEquals("A JOURNAL", entry.getField(StandardField.JOURNAL).orElseThrow());
+        assertEquals(" Doe, Jane ", entry.getField(StandardField.AUTHOR).orElseThrow());
+    }
+
+    /// A stored setting may name a rule a newer JabFix has and this one does not; the library still
+    /// has to save, and the rules it does know still run.
+    @Test
+    void aModeForARuleThatDoesNotExistIsPassedOver() throws IOException {
+        BibEntry entry = new BibEntry(StandardEntryType.Article).withField(StandardField.AUTHOR, " Doe, Jane ");
+        database.insertEntry(entry);
+
+        metaData.setLintSettings(new LintSettings(Map.of(
+                "rule-of-a-newer-jabfix", RuleMode.CHECK,
+                "surrounding-whitespace", RuleMode.FIX)));
+        databaseWriter.writeDatabase(bibtexContext);
+
+        assertEquals("Doe, Jane", entry.getField(StandardField.AUTHOR).orElseThrow());
+    }
+
+    /// The undo manager of the GUI collects these, so a repair has to reach the same list a Save
+    /// Action reaches for a library that asks for no rules.
+    @Test
+    void whatARuleRepairedIsReportedAsAFieldChange() throws IOException {
+        metaData.setSaveActions(new FieldFormatterCleanupActions(true, List.of(
+                new FieldFormatterCleanup(StandardField.TITLE, new LowerCaseFormatter()))));
+        database.insertEntry(new BibEntry(StandardEntryType.Article).withField(StandardField.TITLE, "SOME TITLE"));
+
+        metaData.setLintSettings(new LintSettings(Map.of("title-lower-case", RuleMode.FIX)));
+        databaseWriter.writeDatabase(bibtexContext);
+
+        assertEquals(List.of("some title"),
+                databaseWriter.getSaveActionsFieldChanges().stream().map(FieldChange::newValue).toList());
+    }
+
+    @Test
+    void rulesUseConfiguredMutationScheduler() throws IOException {
+        AtomicInteger scheduledMutations = new AtomicInteger();
+        metaData.setSaveActions(new FieldFormatterCleanupActions(true, List.of(
+                new FieldFormatterCleanup(StandardField.TITLE, new LowerCaseFormatter()))));
+        BibEntry entry = new BibEntry(StandardEntryType.Article).withField(StandardField.TITLE, "SOME TITLE");
+        database.insertEntry(entry);
+
+        databaseWriter.withMutationScheduler(mutation -> {
+            scheduledMutations.incrementAndGet();
+            mutation.run();
+        });
+        metaData.setLintSettings(new LintSettings(Map.of("title-lower-case", RuleMode.FIX)));
+        databaseWriter.writeDatabase(bibtexContext);
+
+        assertEquals(1, scheduledMutations.get());
+        assertEquals("some title", entry.getField(StandardField.TITLE).orElseThrow());
+    }
+
+    /// Nothing is changed that no rule reported, and no rule generates a key yet.
+    // [utest->req~logic.exporter.lint-on-save~1]
+    @Test
+    void citationKeysAreNotGeneratedForALibraryThatAsksForRules() throws IOException {
+        when(citationKeyPatternPreferences.shouldGenerateCiteKeysBeforeSaving()).thenReturn(true);
+        BibEntry entry = new BibEntry(StandardEntryType.Article).withField(StandardField.AUTHOR, "Doe, Jane");
+        database.insertEntry(entry);
+
+        metaData.setLintSettings(new LintSettings(Map.of("surrounding-whitespace", RuleMode.FIX)));
+        databaseWriter.writeDatabase(bibtexContext);
+
+        assertEquals(Optional.empty(), entry.getCitationKey());
+    }
+
+    /// Carrying no settings at all, that is: the save applies its own Save Actions, as always.
+    // [utest->req~logic.exporter.lint-on-save~1]
+    @Test
+    void aLibraryThatAsksForNoRulesIsSavedAsAlways() throws IOException {
+        metaData.setSaveActions(new FieldFormatterCleanupActions(true, List.of(
+                new FieldFormatterCleanup(StandardField.TITLE, new LowerCaseFormatter()))));
+        BibEntry entry = new BibEntry(StandardEntryType.Article).withField(StandardField.TITLE, "SOME TITLE");
+        database.insertEntry(entry);
+
+        databaseWriter.writeDatabase(bibtexContext);
+
+        assertEquals(List.of(), databaseWriter.getFindings());
+        assertEquals("some title", entry.getField(StandardField.TITLE).orElseThrow());
     }
 
     @Test

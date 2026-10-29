@@ -83,6 +83,7 @@ public class MetaData {
     @Nullable private SaveOrder saveOrder;
     @Nullable private String defaultCiteKeyPattern;
     @Nullable private FieldFormatterCleanupActions saveActions;
+    @Nullable private LintSettings lintSettings;
     @Nullable private BibDatabaseMode mode;
     @Nullable private AbbreviationType libraryAbbreviationType;
     @Nullable private Character keywordSeparator;
@@ -254,6 +255,20 @@ public class MetaData {
         postChange();
     }
 
+    /// What the library asks JabFix to do when it is saved. Empty for a library that says nothing,
+    /// which is saved the way it always was.
+    ///
+    /// Not written to the `.bib` file yet: the settings are read from the command line so far, and
+    /// storing them in a `jabref-meta` entry is a change of its own.
+    public Optional<LintSettings> getLintSettings() {
+        return Optional.ofNullable(lintSettings);
+    }
+
+    public void setLintSettings(@NonNull LintSettings lintSettings) {
+        this.lintSettings = lintSettings;
+        postChange();
+    }
+
     public Optional<BibDatabaseMode> getMode() {
         return Optional.ofNullable(mode);
     }
@@ -410,6 +425,11 @@ public class MetaData {
         postChange();
     }
 
+    public void clearLintSettings() {
+        lintSettings = null;
+        postChange();
+    }
+
     public void clearSaveOrder() {
         saveOrder = null;
         postChange();
@@ -452,6 +472,7 @@ public class MetaData {
         saveOrder = other.saveOrder;
         defaultCiteKeyPattern = other.defaultCiteKeyPattern;
         saveActions = other.saveActions;
+        lintSettings = other.lintSettings;
         mode = other.mode;
         libraryAbbreviationType = other.libraryAbbreviationType;
         keywordSeparator = other.keywordSeparator;
@@ -570,6 +591,7 @@ public class MetaData {
                 && Objects.equals(latexFileDirectory, that.latexFileDirectory)
                 && Objects.equals(defaultCiteKeyPattern, that.defaultCiteKeyPattern)
                 && Objects.equals(saveActions, that.saveActions)
+                && Objects.equals(lintSettings, that.lintSettings)
                 && (mode == that.mode)
                 && (libraryAbbreviationType == that.libraryAbbreviationType)
                 && Objects.equals(keywordSeparator, that.keywordSeparator)
@@ -585,12 +607,12 @@ public class MetaData {
     @Override
     public int hashCode() {
         return Objects.hash(isProtected, groupsRoot.getValue(), encoding, encodingExplicitlySupplied, saveOrder, citeKeyPatterns, userFileDirectory,
-                latexFileDirectory, defaultCiteKeyPattern, saveActions, mode, keywordSeparator, librarySpecificFileDirectory, contentSelectors, versionDBStructure, aiLibraryId, gitAutoPull, gitAutoCommit, gitAutoPush);
+                latexFileDirectory, defaultCiteKeyPattern, saveActions, lintSettings, mode, keywordSeparator, librarySpecificFileDirectory, contentSelectors, versionDBStructure, aiLibraryId, gitAutoPull, gitAutoCommit, gitAutoPush);
     }
 
     @Override
     public String toString() {
-        return "MetaData [citeKeyPatterns=" + citeKeyPatterns + ", userFileDirectory=" + userFileDirectory + ", laTexFileDirectory=" + latexFileDirectory + ", groupsRoot=" + groupsRoot + ", encoding=" + encoding + ", saveOrderConfig=" + saveOrder + ", defaultCiteKeyPattern=" + defaultCiteKeyPattern + ", saveActions=" + saveActions + ", mode=" + mode + ", keywordSeparator=" + keywordSeparator + ", isProtected=" + isProtected + ", librarySpecificFileDirectory=" + librarySpecificFileDirectory + ", contentSelectors=" + contentSelectors + ", encodingExplicitlySupplied=" + encodingExplicitlySupplied + ", VersionDBStructure=" + versionDBStructure + ", aiLibraryId=" + aiLibraryId + ", gitAutoPull=" + gitAutoPull + ", gitAutoCommit=" + gitAutoCommit + ", gitAutoPush=" + gitAutoPush + "]";
+        return "MetaData [citeKeyPatterns=" + citeKeyPatterns + ", userFileDirectory=" + userFileDirectory + ", laTexFileDirectory=" + latexFileDirectory + ", groupsRoot=" + groupsRoot + ", encoding=" + encoding + ", saveOrderConfig=" + saveOrder + ", defaultCiteKeyPattern=" + defaultCiteKeyPattern + ", saveActions=" + saveActions + ", lintSettings=" + lintSettings + ", mode=" + mode + ", keywordSeparator=" + keywordSeparator + ", isProtected=" + isProtected + ", librarySpecificFileDirectory=" + librarySpecificFileDirectory + ", contentSelectors=" + contentSelectors + ", encodingExplicitlySupplied=" + encodingExplicitlySupplied + ", VersionDBStructure=" + versionDBStructure + ", aiLibraryId=" + aiLibraryId + ", gitAutoPull=" + gitAutoPull + ", gitAutoCommit=" + gitAutoCommit + ", gitAutoPush=" + gitAutoPush + "]";
     }
 
     public Optional<Path> getBlgFilePath(String user) {
